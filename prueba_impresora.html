@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba de impresora Bluetooth</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 520px; margin: 0 auto; padding: 20px; line-height: 1.5; color: #1b1714; }
+  h1 { font-size: 1.3rem; }
+  button { width: 100%; min-height: 54px; font-size: 1rem; font-weight: 700; border-radius: 10px; border: none; background: #6F4E37; color: #fff; margin: 8px 0; }
+  button:disabled { opacity: .5; }
+  #log { background: #f5f3f0; border-radius: 10px; padding: 14px; margin-top: 16px; font-family: ui-monospace, monospace; font-size: .8rem; white-space: pre-wrap; min-height: 120px; }
+  .ok { color: #2e7d32; font-weight: 700; }
+  .mal { color: #c62828; font-weight: 700; }
+  .nota { background: #fff8e1; border-left: 4px solid #b4802a; padding: 12px; font-size: .88rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Prueba de impresora Bluetooth</h1>
+
+<p class="nota">
+  Ábrela en <strong>Chrome en Android</strong>. Sirve para saber si una
+  impresora funciona con impresión directa desde el navegador, antes de
+  comprar más de una. Enciende la impresora y ponla cerca.
+</p>
+
+<button id="btn-probar">1. Buscar y revisar impresora</button>
+<button id="btn-imprimir" disabled>2. Imprimir ticket de prueba</button>
+
+<div id="log">Esperando…</div>
+
+<script>
+// Identificadores de servicio que usan las impresoras térmicas más comunes.
+// No hay un estándar único, así que se prueban todos.
+const SERVICIOS = [
+  '000018f0-0000-1000-8000-00805f9b34fb',
+  '0000ff00-0000-1000-8000-00805f9b34fb',
+  '0000ffe0-0000-1000-8000-00805f9b34fb',
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455'
+];
+
+let caracteristica = null;
+const log = document.getElementById('log');
+
+function escribir(texto, clase) {
+  log.innerHTML += (clase ? '<span class="' + clase + '">' + texto + '</span>' : texto) + '\n';
+}
+
+document.getElementById('btn-probar').addEventListener('click', async function () {
+  log.innerHTML = '';
+
+  if (!navigator.bluetooth) {
+    escribir('✗ Este navegador no permite Bluetooth.', 'mal');
+    escribir('  Necesitas Chrome en Android. Safari y iPhone no sirven.');
+    return;
+  }
+  escribir('✓ El navegador permite Bluetooth.', 'ok');
+
+  try {
+    escribir('Buscando… elige tu impresora en la lista.');
+
+    // Se listan TODOS los dispositivos cercanos. Filtrar por servicio deja
+    // fuera a impresoras compatibles: el filtro solo ve las que anuncian su
+    // servicio en la señal, y muchas térmicas solo anuncian su nombre.
+    const dispositivo = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: SERVICIOS
+    });
+
+    escribir('✓ Seleccionada: ' + (dispositivo.name || '(sin nombre)'), 'ok');
+    escribir('  Falta lo importante: ver si acepta datos. Sigue leyendo.');
+
+    const servidor = await dispositivo.gatt.connect();
+    escribir('✓ Conectada.', 'ok');
+
+    for (const uuid of SERVICIOS) {
+      try {
+        const servicio = await servidor.getPrimaryService(uuid);
+        const lista = await servicio.getCharacteristics();
+
+        for (const c of lista) {
+          if (c.properties.write || c.properties.writeWithoutResponse) {
+            caracteristica = c;
+            escribir('✓ Canal de datos encontrado.', 'ok');
+            escribir('  Servicio: ' + uuid.slice(0, 8));
+            escribir('');
+            escribir('COMPATIBLE. Ahora prueba el paso 2.', 'ok');
+            document.getElementById('btn-imprimir').disabled = false;
+            return;
+          }
+        }
+      } catch (e) { /* ese servicio no existe aquí */ }
+    }
+
+    escribir('✗ Conectó, pero no expone un canal para recibir datos.', 'mal');
+    escribir('  Casi siempre esto significa Bluetooth Clásico y no BLE.');
+    escribir('  No tiene arreglo por software: el navegador no puede');
+    escribir('  enviarle nada. Haría falta una impresora BLE.');
+
+  } catch (err) {
+    if (String(err).includes('cancel')) {
+      escribir('Búsqueda cancelada.');
+      return;
+    }
+    escribir('✗ ' + err.message, 'mal');
+    escribir('');
+    escribir('Si NO apareció la impresora en la lista:');
+    escribir('  • Puede ser Bluetooth Clásico, que el navegador no ve.');
+    escribir('  • O está apagada, sin batería o lejos.');
+    escribir('');
+    escribir('OJO: que la impresora SÍ aparezca en los ajustes de');
+    escribir('Bluetooth de Android no quiere decir que sea BLE. Son dos');
+    escribir('canales distintos y el navegador solo usa el de baja');
+    escribir('energía. Esta prueba es la que decide.');
+  }
+});
+
+document.getElementById('btn-imprimir').addEventListener('click', async function () {
+  const boton = this;
+  boton.disabled = true;
+
+  try {
+    // Comandos ESC/POS: reiniciar, centrar, texto, avanzar papel.
+    const texto =
+      '\x1B\x40' +            // ESC @ reiniciar
+      '\x1B\x61\x01' +        // centrar
+      '\x1D\x21\x11' +        // doble tamano
+      'PRUEBA OK\n' +
+      '\x1D\x21\x00' +        // tamano normal
+      'Impresora compatible\n' +
+      new Date().toLocaleString() + '\n' +
+      '\x1B\x61\x00' +        // alinear izquierda
+      '--------------------------------\n' +
+      'Si lees esto, esta impresora\n' +
+      'funciona para el sistema.\n' +
+      '\n\n\n';
+
+    const datos = new TextEncoder().encode(texto);
+
+    // Por fragmentos: el BLE tiene un limite pequeno por paquete.
+    for (let i = 0; i < datos.length; i += 180) {
+      const trozo = datos.slice(i, i + 180);
+      if (caracteristica.properties.writeWithoutResponse) {
+        await caracteristica.writeValueWithoutResponse(trozo);
+      } else {
+        await caracteristica.writeValue(trozo);
+      }
+      await new Promise(r => setTimeout(r, 20));
+    }
+
+    escribir('');
+    escribir('✓ Enviado. Revisa el papel.', 'ok');
+    escribir('  Si salio el ticket impreso: SIRVE.', 'ok');
+    escribir('  Si salio en blanco o con simbolos raros: avisame.');
+
+  } catch (err) {
+    escribir('✗ Error al imprimir: ' + err.message, 'mal');
+  }
+
+  boton.disabled = false;
+});
+</script>
+
+</body>
+</html>

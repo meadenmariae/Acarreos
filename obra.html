@@ -1,0 +1,1544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <script src="config.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Consulta de Obra</title>
+  <!-- Sin Google Fonts: se usa la tipografía del sistema (ver Styles.html). -->
+  <style>
+  /* ==========================================================================
+     FASE 3 — VARIABLES DE DISEÑO (light y dark)
+     Paleta: gris claro, café, blanco — según lo solicitado.
+     El "ticket perforado" del número de vale es el elemento distintivo:
+     recuerda al vale físico de papel que este sistema reemplaza.
+     ========================================================================== */
+  :root {
+    --color-bg: #FAF9F6;
+    --color-surface: #FFFFFF;
+    --color-surface-alt: #F1EEE8;
+    --color-border: #E2DED5;
+    --color-text: #2B2622;
+    --color-text-muted: #7A7368;
+    --color-cafe: #6F4E37;
+    --color-cafe-oscuro: #4A3222;
+    --color-cafe-claro: #A9805F;
+    --color-exito: #5B7553;
+    --color-alerta: #B4802A;
+    --color-error: #A23E36;
+
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+
+    --sombra-sm: 0 1px 2px rgba(43, 38, 34, 0.06), 0 1px 1px rgba(43, 38, 34, 0.04);
+    --sombra-md: 0 6px 16px rgba(43, 38, 34, 0.10);
+
+    /* Tipografía del sistema: ya está instalada en el teléfono, así que
+       no hay que descargar nada y la app se dibuja completa aunque no
+       haya señal. En Android esto resuelve a Roboto. */
+    --fuente: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+    --transicion-rapida: 150ms ease;
+    --transicion-base: 220ms cubic-bezier(.4, 0, .2, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #1B1714;
+      --color-surface: #241F1A;
+      --color-surface-alt: #2C2620;
+      --color-border: #3A332B;
+      --color-text: #EDEAE2;
+      --color-text-muted: #A69C8D;
+      --color-cafe: #C89B6E;
+      --color-cafe-oscuro: #E4BE93;
+      --color-cafe-claro: #8B6A4A;
+      --color-exito: #8FAE7F;
+      --color-alerta: #E0A94C;
+      --color-error: #E08579;
+      --sombra-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --sombra-md: 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  /* ==========================================================================
+     RESET Y BASE
+     ========================================================================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--fuente);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  h1, h2, h3 { margin: 0; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; }
+  .oculto { display: none !important; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-cafe);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  /* ==========================================================================
+     LAYOUT GENERAL
+     ========================================================================== */
+  .app {
+    max-width: 560px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .encabezado {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .encabezado-marca { display: flex; flex-direction: column; line-height: 1.2; }
+  .encabezado-titulo { font-size: 1.05rem; font-weight: 800; }
+  .encabezado-subtitulo { font-size: 0.75rem; color: var(--color-text-muted); }
+  .encabezado-acciones { display: flex; align-items: center; gap: 8px; }
+
+  .contenido {
+    flex: 1;
+    padding: 16px;
+    padding-bottom: 8px;
+  }
+
+  /* ==========================================================================
+     INDICADOR DE CONEXIÓN
+     ========================================================================== */
+  .estado-conexion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: var(--color-surface-alt);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+  .estado-conexion .punto {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+  .estado-conexion[data-estado="conectado"] .punto { background: var(--color-exito); }
+  .estado-conexion[data-estado="conectado"] { color: var(--color-exito); }
+  .estado-conexion[data-estado="sin-conexion"] .punto { background: var(--color-error); }
+  .estado-conexion[data-estado="sin-conexion"] { color: var(--color-error); }
+  .estado-conexion[data-estado="sincronizando"] .punto {
+    background: var(--color-alerta);
+    animation: pulso 1.1s ease-in-out infinite;
+  }
+  .estado-conexion[data-estado="sincronizando"] { color: var(--color-alerta); }
+
+  @keyframes pulso {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .btn-icono {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transicion-rapida), transform var(--transicion-rapida);
+  }
+  .btn-icono:active { transform: scale(0.93); }
+  .btn-icono svg { width: 18px; height: 18px; }
+
+  .badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--color-error);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ==========================================================================
+     TARJETAS / SECCIONES
+     ========================================================================== */
+  .tarjeta {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--sombra-sm);
+    padding: 18px;
+    margin-bottom: 14px;
+    animation: aparecer var(--transicion-base) ease;
+  }
+  @keyframes aparecer {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tarjeta-titulo {
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    margin-bottom: 14px;
+  }
+
+  /* ==========================================================================
+     CAMPOS DE FORMULARIO
+     ========================================================================== */
+  .campo { margin-bottom: 16px; }
+  .campo:last-child { margin-bottom: 0; }
+
+  .campo label,
+  .etiqueta-estatica {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  .fila-doble {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 1rem;
+    transition: border-color var(--transicion-rapida);
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'><path d='M5 7.5L10 12.5L15 7.5' stroke='%237A7368' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 38px;
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { border-color: var(--color-cafe); }
+  input::placeholder, textarea::placeholder { color: var(--color-text-muted); opacity: 0.7; }
+
+  .valor-estatico {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ayuda {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+  }
+
+  .ayuda-ubicacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .ayuda-ubicacion .ayuda { margin-top: 0; flex: 1; }
+  .btn-enlace {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 4px 0;
+    color: var(--color-cafe);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* Ticket del número de vale — el elemento distintivo de la interfaz */
+  .vale-ticket {
+    position: relative;
+    background: var(--color-surface-alt);
+    border: 1.5px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px 20px;
+    overflow: hidden;
+    text-align: center;
+  }
+  .vale-ticket::before,
+  .vale-ticket::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    background: var(--color-bg);
+    border-radius: 50%;
+    transform: translateY(-50%);
+  }
+  .vale-ticket::before { left: -8px; }
+  .vale-ticket::after { right: -8px; }
+  .vale-numero {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-cafe-oscuro);
+  }
+
+  /* ==========================================================================
+     SEGMENTADO ENTRADA / SALIDA
+     ========================================================================== */
+  .segmentado {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .segmentado-boton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 64px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    font-weight: 800;
+    transition: var(--transicion-base);
+  }
+  .segmentado-boton svg { width: 20px; height: 20px; }
+  .segmentado-boton[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+    box-shadow: var(--sombra-md);
+  }
+  .segmentado-chico .segmentado-boton {
+    min-height: 46px;
+    font-size: 0.9rem;
+  }
+
+  /* ==========================================================================
+     BLOQUE CAMIÓN (QR / buscador / info)
+     ========================================================================== */
+  .btn-secundario {
+    width: 100%;
+    min-height: 48px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 700;
+    transition: border-color var(--transicion-rapida);
+  }
+  .btn-secundario:active { border-color: var(--color-cafe); }
+
+  .lista-resultados {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+  }
+  .lista-resultados li {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.92rem;
+  }
+  .lista-resultados li:active { background: var(--color-surface-alt); }
+
+  .tarjeta-info {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+  }
+  .info-fila {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9rem;
+  }
+  .info-fila:last-of-type { border-bottom: none; }
+  .info-fila span { color: var(--color-text-muted); }
+
+  /* ==========================================================================
+     FOTOGRAFÍA
+     ========================================================================== */
+  .foto-vista-previa {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    margin-top: 10px;
+    border: 1px solid var(--color-border);
+  }
+
+  /* ==========================================================================
+     PIE FIJO / BOTÓN GUARDAR
+     ========================================================================== */
+  .pie-fijo {
+    position: sticky;
+    bottom: 0;
+    padding: 14px 16px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--color-bg) 65%, transparent);
+  }
+  .btn-guardar {
+    width: 100%;
+    min-height: 56px;
+    border-radius: var(--radius-md);
+    border: none;
+    background: var(--color-cafe-oscuro);
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 800;
+    box-shadow: var(--sombra-md);
+    transition: var(--transicion-base);
+  }
+  .btn-guardar:active { transform: scale(0.98); }
+  .btn-guardar:disabled { opacity: 0.5; box-shadow: none; }
+
+  /* ==========================================================================
+     MODAL DE CÁMARA (foto / QR)
+     ========================================================================== */
+  .contenedor-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 17, 14, 0.75);
+    padding: 20px;
+  }
+  /* Nombradas así por la cámara en vivo original; hoy las usa el modal
+     de vista previa del ticket. */
+  .modal-camara-caja {
+    width: 100%;
+    max-width: 440px;
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    box-shadow: var(--sombra-md);
+  }
+  /* Casilla de ciclo completo: área táctil amplia, para tocarla de prisa. */
+  .casilla {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    margin-top: 12px;
+    padding: 0 14px;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .casilla input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    accent-color: var(--color-cafe);
+    margin: 0;
+  }
+  .casilla:has(input:checked) {
+    border-color: var(--color-cafe);
+    background: var(--color-surface-alt);
+  }
+  .opcional {
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-size: 0.85em;
+  }
+
+  /* El aviso del vale de cierre cambia de color según el resultado de la
+     verificación: es el dato que liga los dos movimientos del ciclo. */
+  /* Nota que explica para qué sirve el campo: se distingue del texto de
+     estado (GPS, validaciones) para que no se confundan entre sí. */
+  .nota-fija {
+    display: block;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .ayuda[data-estado="ok"] { color: var(--color-exito); font-weight: 700; }
+  .ayuda[data-estado="error"] { color: var(--color-error); font-weight: 700; }
+  .ayuda[data-estado="aviso"] { color: var(--color-cafe-oscuro); font-weight: 700; }
+
+  .grid-camiones {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .btn-camion {
+    min-height: 56px;
+    padding: 8px 6px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 800;
+    font-size: 0.95rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+  .btn-camion .placa-mini {
+    display: block;
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+  .btn-camion[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+  }
+  .btn-camion[aria-pressed="true"] .placa-mini { color: rgba(255,255,255,0.85); }
+
+  .oculto-total {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    left: -9999px;
+  }
+  .acciones-secundarias-ticket {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  /* Oculta de verdad, sin depender de la especificidad de cada regla.
+     No se reutiliza .oculto-total para esto: aquella mueve el elemento fuera
+     de la pantalla con position/left, y la pantalla del PIN define su propio
+     position:fixed e inset:0 — se pisaban entre sí y la pantalla seguía
+     encima de la app. display:none no tiene ese problema. */
+  .pantalla-oculta { display: none !important; }
+
+  /* ==========================================================================
+     PANTALLA DE ENTRADA CON PIN (app de captura)
+     ========================================================================== */
+  .pantalla-pin {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: var(--color-bg);
+    z-index: 50;
+  }
+
+  .tarjeta-pin {
+    width: 100%;
+    max-width: 340px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 28px 22px;
+    box-shadow: var(--sombra-md);
+    text-align: center;
+  }
+
+  .marca-pin { margin-bottom: 22px; }
+
+  .marca-pin-titulo {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--color-text);
+  }
+
+  .marca-pin-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .tarjeta-pin label {
+    display: block;
+    text-align: left;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  /* Dígitos grandes y separados: esto se teclea a la intemperie, a veces con
+     guantes, y hay que poder ver cuántos se llevan escritos. */
+  .campo-pin {
+    width: 100%;
+    min-height: 58px;
+    text-align: center;
+    font-size: 1.6rem;
+    letter-spacing: 0.35em;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .error-pin {
+    min-height: 20px;
+    margin-top: 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--color-error);
+  }
+
+  .tarjeta-pin .ayuda {
+    display: block;
+    margin-top: 4px;
+    text-align: center;
+  }
+
+  /* Nombre del checador ya identificado: se ve, no se edita. */
+  .fila-checador {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .fila-checador input[readonly] {
+    flex: 1;
+    background: var(--color-surface-alt);
+    font-weight: 700;
+    cursor: default;
+  }
+
+  .fila-checador .btn-enlace { flex: 0 0 auto; }
+  .ticket-imagen {
+    display: block;
+    width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    image-rendering: pixelated; /* nítido a 1:1 en vez de borroso al escalar */
+  }
+  .modal-camara-acciones {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  /* ==========================================================================
+     TOASTS (mensajes de validación / estado)
+     ========================================================================== */
+  .contenedor-toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 528px;
+    margin: 0 auto;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border-left: 4px solid var(--color-text-muted);
+    box-shadow: var(--sombra-md);
+    font-size: 0.88rem;
+    animation: deslizar var(--transicion-base) ease;
+  }
+  .toast[data-tipo="exito"] { border-left-color: var(--color-exito); }
+  .toast[data-tipo="error"] { border-left-color: var(--color-error); }
+  .toast[data-tipo="info"] { border-left-color: var(--color-alerta); }
+  @keyframes deslizar {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (min-width: 400px) {
+    .contenedor-modal { padding: 24px; }
+  }
+</style>
+
+  <style>
+  /* ==========================================================================
+     CONSULTA DE OBRA — pensada para verse en el celular, parado en la obra:
+     tarjetas grandes en vez de tabla, porque una tabla con 10 columnas es
+     ilegible en pantalla chica.
+     ========================================================================== */
+  .pantalla-login {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .tarjeta-login {
+    width: 100%;
+    max-width: 360px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--sombra-md);
+    padding: 28px 24px;
+  }
+  .tarjeta-login h1 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    text-align: center;
+  }
+  .tarjeta-login p {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin: 4px 0 20px;
+    text-align: center;
+  }
+  /* La lista de sugerencias se posiciona sobre el campo, así que su
+     contenedor necesita ser el punto de referencia. */
+  .campo-autocomplete { position: relative; }
+
+  .error-login {
+    margin-top: 10px;
+    font-size: 0.82rem;
+    color: var(--color-error);
+    min-height: 1.2em;
+    text-align: center;
+  }
+
+  .obra-app {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+  }
+  .obra-encabezado {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .obra-encabezado h1 { font-size: 1.2rem; font-weight: 800; }
+  .obra-encabezado .subt { font-size: 0.82rem; color: var(--color-text-muted); }
+  .obra-encabezado .btn-secundario { width: auto; padding: 0 16px; min-height: 40px; }
+
+  .barra-filtros-obra {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    padding: 14px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+  }
+  .barra-filtros-obra .campo { margin-bottom: 0; }
+  .barra-filtros-obra label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+  }
+  .barra-filtros-obra .btn-guardar { grid-column: 1 / -1; }
+
+  .kpis-obra {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .kpi-obra {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 12px 14px;
+  }
+  .kpi-obra .valor {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--color-cafe-oscuro);
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-obra .etiqueta {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+  }
+  .kpi-obra[data-alerta="true"] .valor { color: var(--color-error); }
+
+  /* Cada movimiento como tarjeta, con una franja de color a la izquierda
+     que permite distinguir entrada / salida / pendiente sin leer. */
+  .tarjeta-movimiento {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .tarjeta-movimiento[data-tipo="ENTRADA"] { border-left-color: var(--color-exito); }
+  .tarjeta-movimiento[data-tipo="SALIDA"] { border-left-color: var(--color-cafe); }
+  .tarjeta-movimiento[data-abierto="true"] { border-left-color: var(--color-error); }
+
+  .mov-cabecera {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .mov-vale {
+    font-weight: 800;
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .mov-hora { font-size: 0.8rem; color: var(--color-text-muted); }
+  .mov-datos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 4px 14px;
+    font-size: 0.85rem;
+  }
+  .mov-datos span { color: var(--color-text-muted); }
+  .mov-datos strong { font-weight: 700; }
+
+  .etiquetas-mov {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .etiqueta-mov {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: var(--color-surface-alt);
+    color: var(--color-text-muted);
+  }
+  .etiqueta-mov[data-papel="Salió de aquí"] {
+    background: var(--color-cafe);
+    color: #fff;
+  }
+  .etiqueta-mov[data-papel="Llegó aquí"] {
+    background: var(--color-exito);
+    color: #fff;
+  }
+  .etiqueta-mov[data-estado="abierto"] {
+    background: var(--color-error);
+    color: #fff;
+  }
+  .etiqueta-mov a { color: var(--color-cafe); text-decoration: none; font-weight: 700; }
+
+  .sin-datos {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+  }
+</style>
+
+  <link rel="icon" type="image/png" sizes="192x192" href="icono-192.png">
+  <link rel="apple-touch-icon" href="icono-180.png">
+  <meta name="theme-color" content="#6F4E37">
+</head>
+<body>
+
+  <!-- ================= ENTRADA ================= -->
+  <div class="pantalla-login" id="pantalla-login">
+    <div class="tarjeta-login">
+      <h1>Consulta de Obra</h1>
+      <p>Movimientos del día en tu obra</p>
+
+      <!-- La entrada va en dos pasos a propósito: la contraseña primero, y
+           solo después las listas de nombres y obras. Si las listas se
+           cargaran antes, cualquiera con la dirección del backend podría
+           pedirlas sin ser nadie. -->
+      <div class="campo">
+        <label for="encargado-password">Contraseña</label>
+        <input type="password" id="encargado-password" placeholder="Contraseña" autocomplete="current-password">
+      </div>
+
+      <button type="button" class="btn-guardar" id="btn-continuar">Continuar</button>
+
+      <div id="paso-identificacion" class="pantalla-oculta">
+        <div class="campo campo-autocomplete">
+          <label for="encargado-nombre">Tu nombre</label>
+          <input type="text" id="encargado-nombre" placeholder="Escribe tu nombre" autocomplete="off">
+          <ul class="lista-resultados oculto" id="encargado-nombre-resultados"></ul>
+        </div>
+
+        <div class="campo campo-autocomplete">
+          <label for="encargado-obra">Obra que quieres revisar</label>
+          <input type="text" id="encargado-obra" placeholder="Escribe para buscar la obra" autocomplete="off">
+          <ul class="lista-resultados oculto" id="encargado-obra-resultados"></ul>
+          <span class="ayuda" id="obra-restriccion"></span>
+        </div>
+
+        <button type="button" class="btn-guardar" id="btn-entrar">Entrar</button>
+      </div>
+
+      <div class="error-login" id="error-login"></div>
+    </div>
+  </div>
+
+  <!-- ================= CONSULTA ================= -->
+  <div class="obra-app oculto" id="panel-obra">
+
+    <div class="obra-encabezado">
+      <div>
+        <h1 id="titulo-obra">—</h1>
+        <span class="subt" id="subtitulo-encargado">—</span>
+      </div>
+      <button type="button" class="btn-secundario" id="btn-salir">Salir</button>
+    </div>
+
+    <div class="barra-filtros-obra">
+      <div class="campo">
+        <label for="filtro-fecha">Fecha</label>
+        <input type="date" id="filtro-fecha">
+      </div>
+      <div class="campo">
+        <label for="filtro-tipo">Movimiento</label>
+        <select id="filtro-tipo">
+          <option value="">Todos</option>
+          <option value="ENTRADA">Solo entradas</option>
+          <option value="SALIDA">Solo salidas</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label for="filtro-ciclo">Ciclo</label>
+        <select id="filtro-ciclo">
+          <option value="">Todos</option>
+          <option value="ABIERTO">Esperando regreso</option>
+          <option value="SI">Ciclo completo</option>
+          <option value="NO">Sin ciclo</option>
+        </select>
+      </div>
+      <button type="button" class="btn-guardar" id="btn-actualizar">Actualizar</button>
+    </div>
+
+    <div class="kpis-obra" id="kpis-obra"></div>
+
+    <div id="lista-movimientos"></div>
+  </div>
+
+  <div class="contenedor-toast" id="contenedor-toast" aria-live="assertive"></div>
+
+  <script>
+  // ============================================================================
+  // CLIENTE DE API — reemplazo de google.script.run
+  // ============================================================================
+  // Cuando la app vive dentro de Apps Script, el objeto google.script.run ya
+  // existe y permite llamar funciones del servidor. Al mover la app a un
+  // hosting propio (necesario para poder imprimir por Bluetooth), ese objeto
+  // desaparece.
+  //
+  // En vez de reescribir las cientos de llamadas repartidas por el proyecto,
+  // aquí se construye un objeto con la MISMA forma que google.script.run,
+  // pero que por dentro manda una petición al backend. Así todo el código
+  // que ya funcionaba sigue igual, y el mismo archivo sirve en los dos
+  // escenarios: si google.script.run ya existe, esto no hace nada.
+  //
+  // CONFIGURACIÓN: la URL de la Web App de Apps Script (la que termina en
+  // /exec) se pone en el archivo config.js, al lado de las páginas. Así se
+  // puede cambiar sin volver a generar nada: se edita esa línea y listo.
+  // El valor de abajo solo se usa si config.js no existe.
+  // ============================================================================
+
+  const URL_BACKEND = (typeof window !== 'undefined' && window.URL_BACKEND_ACARREO)
+    ? window.URL_BACKEND_ACARREO
+    : 'PON_AQUI_LA_URL_DE_TU_WEB_APP_QUE_TERMINA_EN_EXEC';
+
+  (function () {
+    // Si ya existe (la app corriendo dentro de Apps Script), no se toca nada.
+    if (window.google && window.google.script && window.google.script.run) return;
+
+    /**
+     * Manda una operación al backend.
+     *
+     * El tipo de contenido es "text/plain" a propósito: con
+     * "application/json" el navegador hace una consulta previa (preflight)
+     * que Apps Script no responde, y la llamada falla. El contenido va en
+     * JSON igual; solo cambia la etiqueta con la que viaja.
+     */
+    function llamarBackend(operacion, argumentos) {
+      return fetch(URL_BACKEND, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ operacion: operacion, argumentos: argumentos })
+      }).then(function (respuesta) {
+        if (!respuesta.ok) throw new Error('El servidor respondió ' + respuesta.status);
+        return respuesta.json();
+      });
+    }
+
+    /**
+     * Imita el encadenamiento de google.script.run:
+     *   google.script.run.withSuccessHandler(f).withFailureHandler(g).operacion(args)
+     *
+     * Cada llamada a withSuccessHandler/withFailureHandler devuelve un objeto
+     * nuevo, igual que el original, para que se puedan encadenar en
+     * cualquier orden sin pisarse entre sí.
+     */
+    function construirCorredor(alExito, alFallar) {
+      const corredor = {
+        withSuccessHandler: function (f) { return construirCorredor(f, alFallar); },
+        withFailureHandler: function (f) { return construirCorredor(alExito, f); },
+        withUserObject: function () { return corredor; } // existe por compatibilidad
+      };
+
+      // Cada operación permitida se expone como método, igual que el original.
+      OPERACIONES_DISPONIBLES.forEach(function (operacion) {
+        corredor[operacion] = function () {
+          const argumentos = Array.prototype.slice.call(arguments);
+
+          llamarBackend(operacion, argumentos)
+            .then(function (resultado) { if (alExito) alExito(resultado); })
+            .catch(function (err) {
+              if (alFallar) {
+                alFallar(err);
+              } else {
+                // Sin manejador de error, al menos queda registro en la
+                // consola en vez de desaparecer en silencio.
+                console.error('Error llamando a ' + operacion + ':', err);
+              }
+            });
+        };
+      });
+
+      // Red de seguridad: si el código llama a una operación que no está en
+      // la lista de arriba, el objeto no tendría ese método y el navegador
+      // soltaría un "no es una función" sin decir cuál ni por qué. Esto ya
+      // estuvo a punto de romper el login: la operación existía en Code.gs
+      // pero faltaba aquí. Con esta trampa el error dice exactamente qué
+      // agregar y dónde.
+      if (typeof Proxy === 'function') {
+        return new Proxy(corredor, {
+          get: function (objetivo, propiedad) {
+            if (propiedad in objetivo) return objetivo[propiedad];
+            if (typeof propiedad !== 'string') return undefined;
+            throw new Error(
+              'La operación "' + propiedad + '" no está dada de alta en ApiCliente.html. ' +
+              'Agrégala a OPERACIONES_DISPONIBLES (y revisa que exista en OPERACIONES_API de Code.gs).'
+            );
+          }
+        });
+      }
+
+      return corredor;
+    }
+
+    // Debe coincidir con OPERACIONES_API de Code.gs.
+    const OPERACIONES_DISPONIBLES = [
+      'obtenerCatalogos', 'obtenerInfoValeObra', 'guardarRegistro',
+      'guardarRegistrosEnLote', 'verificarValeCiclo',
+      'iniciarSesionChecador', 'renovarSesionChecador',
+      'iniciarSesionAdmin', 'cerrarSesionAdmin', 'obtenerEsquemasCatalogos',
+      'listarFilasCatalogo', 'agregarFilaCatalogo', 'editarFilaCatalogo',
+      'eliminarFilaCatalogo', 'listarRegistros', 'eliminarRegistro',
+      'exportarRegistrosExcel', 'exportarRegistrosPDF', 'obtenerDatosDashboard',
+      'obtenerDatosEntradaObra', 'iniciarSesionEncargado',
+      'cerrarSesionEncargado', 'obtenerMovimientosEncargado'
+    ];
+
+    window.google = window.google || {};
+    window.google.script = window.google.script || {};
+    window.google.script.run = construirCorredor(null, null);
+  })();
+</script>
+
+  <script>
+  // ============================================================================
+  // CONSULTA DE OBRA (encargados)
+  // ============================================================================
+  // Vista de SOLO LECTURA. El encargado entra con su nombre y la contraseña
+  // compartida, y solo puede ver su propia obra: el backend guarda la obra
+  // dentro del token de sesión, así que no hay forma de pedir otra desde el
+  // navegador aunque se manipule la página.
+  // ============================================================================
+
+  const estadoObra = {
+    token: null,
+    nombre: '',
+    obra: '',
+    obrasDisponibles: [],
+    encargadosDisponibles: []
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('btn-continuar').addEventListener('click', comprobarContrasena);
+    document.getElementById('btn-entrar').addEventListener('click', intentarEntrar);
+    document.getElementById('encargado-password').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') comprobarContrasena();
+    });
+    // Si corrige la contraseña hay que volver a comprobarla: las listas que
+    // ya se bajaron corresponden a la contraseña anterior.
+    document.getElementById('encargado-password').addEventListener('input', function () {
+      document.getElementById('paso-identificacion').classList.add('pantalla-oculta');
+      document.getElementById('error-login').textContent = '';
+    });
+    document.getElementById('encargado-nombre').addEventListener('input', actualizarAvisoRestriccion);
+    document.getElementById('encargado-obra').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') intentarEntrar();
+    });
+    document.getElementById('btn-salir').addEventListener('click', salir);
+
+    // Las listas ya NO se piden al abrir: se piden después de la contraseña.
+    configurarAutocompleteEncargado();
+    configurarAutocompleteObra();
+    document.getElementById('btn-actualizar').addEventListener('click', cargarMovimientos);
+
+    // Los tres filtros recargan solos: es una vista de consulta, no hay
+    // razón para obligar a tocar "Actualizar" después de cada cambio.
+    ['filtro-fecha', 'filtro-tipo', 'filtro-ciclo'].forEach(function (id) {
+      document.getElementById(id).addEventListener('change', cargarMovimientos);
+    });
+
+    const guardado = sessionStorage.getItem('encargado_sesion');
+    if (guardado) {
+      try {
+        const sesion = JSON.parse(guardado);
+        estadoObra.token = sesion.token;
+        estadoObra.nombre = sesion.nombre;
+        estadoObra.obra = sesion.obra;
+        mostrarPanel();
+      } catch (err) { /* sesión corrupta: se ignora y se pide entrar de nuevo */ }
+    }
+  });
+
+  // ==========================================================================
+  // SESIÓN
+  // ==========================================================================
+  /**
+   * Paso 1: comprueba la contraseña compartida y, solo si es correcta, baja
+   * las listas de nombres y obras para el autocompletado.
+   */
+  function comprobarContrasena() {
+    const password = document.getElementById('encargado-password').value;
+    const error = document.getElementById('error-login');
+    const boton = document.getElementById('btn-continuar');
+    error.textContent = '';
+
+    if (!password) { error.textContent = 'Escribe la contraseña.'; return; }
+
+    boton.disabled = true;
+    boton.textContent = 'Comprobando…';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        boton.disabled = false;
+        boton.textContent = 'Continuar';
+
+        if (!respuesta || !respuesta.exito) {
+          error.textContent = (respuesta && respuesta.error) || 'No se pudo comprobar la contraseña.';
+          return;
+        }
+
+        estadoObra.obrasDisponibles = respuesta.obras || [];
+        estadoObra.encargadosDisponibles = respuesta.encargados || [];
+
+        document.getElementById('paso-identificacion').classList.remove('pantalla-oculta');
+        document.getElementById('encargado-nombre').focus();
+        actualizarAvisoRestriccion();
+      })
+      .withFailureHandler(function (err) {
+        boton.disabled = false;
+        boton.textContent = 'Continuar';
+        error.textContent = 'No se pudo conectar: ' + err.message;
+      })
+      .obtenerDatosEntradaObra(password);
+  }
+
+  /**
+   * Compara nombres ignorando acentos, mayúsculas y espacios de sobra.
+   * Sin esto, escribir "Hernandez" no encontraba a "Hernández" y el
+   * sistema entendía que la persona no estaba en el catálogo — con lo cual
+   * dejaba de filtrar las obras sin decir nada.
+   */
+  function _mismoNombre(a, b) {
+    const normalizar = function (t) {
+      return String(t == null ? '' : t)
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ').trim().toLowerCase();
+    };
+    return normalizar(a) === normalizar(b);
+  }
+
+  /**
+   * Deja claro si las sugerencias de obra están limitadas a las del
+   * encargado o si se están mostrando todas.
+   */
+  function actualizarAvisoRestriccion() {
+    const ayuda = document.getElementById('obra-restriccion');
+    const nombre = document.getElementById('encargado-nombre').value.trim();
+    if (!nombre) { ayuda.textContent = ''; return; }
+
+    const encargado = estadoObra.encargadosDisponibles.find(function (e) { return _mismoNombre(e.nombre, nombre); });
+
+    if (!encargado) {
+      ayuda.textContent = 'Ese nombre no está en el catálogo de encargados.';
+      return;
+    }
+
+    const suyas = _obrasDelEncargado();
+    ayuda.textContent = suyas.length > 0
+      ? 'Tus obras: ' + suyas.join(', ')
+      : 'Puedes consultar cualquier obra.';
+  }
+
+  /**
+   * Autocompletado sencillo para un campo de texto. Se usa en los dos
+   * campos de la pantalla de entrada, en vez de duplicar la misma lógica.
+   * @param obtenerOpciones función que devuelve el arreglo de textos
+   * @param alElegir        se llama con el texto elegido
+   */
+  function configurarAutocomplete(idInput, idLista, obtenerOpciones, alElegir) {
+    const input = document.getElementById(idInput);
+    const lista = document.getElementById(idLista);
+
+    function pintar() {
+      const termino = input.value.trim().toLowerCase();
+      lista.innerHTML = '';
+
+      const opciones = obtenerOpciones();
+      const coincidencias = (termino
+        ? opciones.filter(function (o) { return String(o).toLowerCase().indexOf(termino) !== -1; })
+        : opciones
+      ).slice(0, 8);
+
+      if (coincidencias.length === 0) { lista.classList.add('oculto'); return; }
+
+      coincidencias.forEach(function (nombre) {
+        const item = document.createElement('li');
+        item.textContent = nombre;
+        // mousedown ocurre ANTES que blur: con click, el campo perdería el
+        // foco y se ocultaría la lista antes de aplicar la selección.
+        item.addEventListener('mousedown', function (evento) {
+          evento.preventDefault();
+          input.value = nombre;
+          lista.classList.add('oculto');
+          if (alElegir) alElegir(nombre);
+        });
+        lista.appendChild(item);
+      });
+
+      lista.classList.remove('oculto');
+    }
+
+    input.addEventListener('input', pintar);
+    // Al enfocar un campo vacío se muestran las opciones disponibles: son
+    // pocas, y ahorra tener que adivinar cómo está escrito el nombre.
+    input.addEventListener('focus', pintar);
+    input.addEventListener('blur', function () {
+      setTimeout(function () { lista.classList.add('oculto'); }, 180);
+    });
+  }
+
+  function configurarAutocompleteEncargado() {
+    configurarAutocomplete(
+      'encargado-nombre', 'encargado-nombre-resultados',
+      function () { return estadoObra.encargadosDisponibles.map(function (e) { return e.nombre; }); },
+      function () {
+        // Al elegir el encargado, sus obras pasan a ser las sugerencias.
+        actualizarAvisoRestriccion();
+        document.getElementById('encargado-obra').value = '';
+        const suyas = _obrasDelEncargado();
+        if (suyas.length === 1) {
+          // Si solo tiene una obra, no tiene caso hacérsela escribir.
+          document.getElementById('encargado-obra').value = suyas[0];
+          document.getElementById('encargado-password').focus();
+        } else {
+          document.getElementById('encargado-obra').focus();
+        }
+      }
+    );
+  }
+
+  function configurarAutocompleteObra() {
+    configurarAutocomplete(
+      'encargado-obra', 'encargado-obra-resultados',
+      function () {
+        // Si el encargado tiene obras asignadas, solo se sugieren esas:
+        // ver la lista completa cuando solo puede entrar a dos confunde.
+        const suyas = _obrasDelEncargado();
+        return suyas.length > 0 ? suyas : estadoObra.obrasDisponibles;
+      },
+      function () { document.getElementById('encargado-password').focus(); }
+    );
+  }
+
+  /**
+   * Obras asignadas al encargado escrito, según el catálogo. Devuelve un
+   * arreglo vacío si no se reconoce el nombre o si no tiene obras
+   * específicas (en cuyo caso puede consultar cualquiera).
+   */
+  function _obrasDelEncargado() {
+    const escrito = document.getElementById('encargado-nombre').value.trim();
+    if (!escrito) return [];
+
+    const encargado = estadoObra.encargadosDisponibles.find(function (e) { return _mismoNombre(e.nombre, escrito); });
+    if (!encargado || !encargado.obras) return [];
+
+    return encargado.obras.split(/[,;\n]/).map(function (o) { return o.trim(); }).filter(Boolean);
+  }
+
+  function intentarEntrar() {
+    const nombre = document.getElementById('encargado-nombre').value.trim();
+    const obra = document.getElementById('encargado-obra').value.trim();
+    const password = document.getElementById('encargado-password').value;
+    const error = document.getElementById('error-login');
+    error.textContent = '';
+
+    if (!password) { error.textContent = 'Escribe la contraseña.'; return; }
+    if (!nombre) { error.textContent = 'Escribe tu nombre.'; return; }
+    if (!obra) { error.textContent = 'Indica la obra que quieres revisar.'; return; }
+
+    const boton = document.getElementById('btn-entrar');
+    boton.disabled = true;
+    boton.textContent = 'Entrando…';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        boton.disabled = false;
+        boton.textContent = 'Entrar';
+        if (!respuesta.exito) { error.textContent = respuesta.error; return; }
+
+        estadoObra.token = respuesta.token;
+        estadoObra.nombre = respuesta.nombre;
+        estadoObra.obra = respuesta.obra;
+        sessionStorage.setItem('encargado_sesion', JSON.stringify({
+          token: respuesta.token, nombre: respuesta.nombre, obra: respuesta.obra
+        }));
+        mostrarPanel();
+      })
+      .withFailureHandler(function (err) {
+        boton.disabled = false;
+        boton.textContent = 'Entrar';
+        error.textContent = 'No se pudo conectar: ' + err.message;
+      })
+      .iniciarSesionEncargado(nombre, obra, password);
+  }
+
+  function mostrarPanel() {
+    document.getElementById('pantalla-login').classList.add('oculto');
+    document.getElementById('panel-obra').classList.remove('oculto');
+    document.getElementById('titulo-obra').textContent = estadoObra.obra;
+    document.getElementById('subtitulo-encargado').textContent = estadoObra.nombre;
+    document.getElementById('encargado-password').value = '';
+    cargarMovimientos();
+  }
+
+  function salir() {
+    if (estadoObra.token) google.script.run.cerrarSesionEncargado(estadoObra.token);
+    sessionStorage.removeItem('encargado_sesion');
+    estadoObra.token = null;
+    document.getElementById('panel-obra').classList.add('oculto');
+    document.getElementById('pantalla-login').classList.remove('oculto');
+
+    // El nombre se conserva y la obra se limpia: quien cubre varias obras
+    // normalmente sale justo para revisar otra.
+    document.getElementById('encargado-obra').value = '';
+    document.getElementById('encargado-obra').focus();
+  }
+
+  // ==========================================================================
+  // MOVIMIENTOS
+  // ==========================================================================
+  function cargarMovimientos() {
+    const contenedor = document.getElementById('lista-movimientos');
+    contenedor.innerHTML = '<p class="sin-datos">Cargando…</p>';
+
+    const filtros = {
+      fecha: document.getElementById('filtro-fecha').value,
+      tipo: document.getElementById('filtro-tipo').value,
+      ciclo: document.getElementById('filtro-ciclo').value
+    };
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        // Todo lo que sigue va dentro de un try: si algo falla al dibujar,
+        // antes la pantalla se quedaba en "Cargando…" para siempre, sin
+        // decir qué pasó. Es preferible mostrar el error que fingir que
+        // sigue trabajando.
+        try {
+        if (!respuesta) {
+          contenedor.innerHTML = '<p class="sin-datos">El servidor no devolvió datos. Vuelve a intentar.</p>';
+          return;
+        }
+        if (!respuesta.exito) {
+          if (String(respuesta.error).indexOf('sesión expiró') !== -1) {
+            salir();
+            mostrarToast('Tu sesión expiró. Vuelve a entrar.', 'error');
+            return;
+          }
+          contenedor.innerHTML = '<p class="sin-datos">' + respuesta.error + '</p>';
+          return;
+        }
+
+        // La fecha viene resuelta del servidor la primera vez (hoy), para
+        // no depender de la hora del celular, que puede estar desfasada.
+        if (!document.getElementById('filtro-fecha').value && respuesta.fecha) {
+          document.getElementById('filtro-fecha').value = respuesta.fecha;
+        }
+
+        dibujarKPIs(respuesta.resumen || {});
+        dibujarMovimientos(respuesta.datos || []);
+        } catch (err) {
+          contenedor.innerHTML = '<p class="sin-datos">Error al mostrar los movimientos: ' + err.message + '</p>';
+        }
+      })
+      .withFailureHandler(function (err) {
+        contenedor.innerHTML = '<p class="sin-datos">No se pudo cargar: ' + err.message + '</p>';
+      })
+      .obtenerMovimientosEncargado(filtros, estadoObra.token);
+  }
+
+  function dibujarKPIs(resumen) {
+    const n = function (v) { return (v === undefined || v === null) ? 0 : v; };
+    const tarjetas = [
+      { valor: n(resumen.entradas), etiqueta: 'Entradas', alerta: false },
+      { valor: n(resumen.salidas), etiqueta: 'Salidas', alerta: false },
+      { valor: n(resumen.ciclosAbiertos), etiqueta: 'Esperando regreso', alerta: n(resumen.ciclosAbiertos) > 0 },
+      { valor: n(resumen.volumenEntradas) + ' m³', etiqueta: 'Volumen recibido', alerta: false },
+      { valor: n(resumen.volumenSalidas) + ' m³', etiqueta: 'Volumen enviado', alerta: false }
+    ];
+
+    document.getElementById('kpis-obra').innerHTML = tarjetas.map(function (t) {
+      return '<div class="kpi-obra" data-alerta="' + t.alerta + '">' +
+             '<div class="valor">' + t.valor + '</div>' +
+             '<div class="etiqueta">' + t.etiqueta + '</div></div>';
+    }).join('');
+  }
+
+  function dibujarMovimientos(movimientos) {
+    const contenedor = document.getElementById('lista-movimientos');
+
+    if (!movimientos || movimientos.length === 0) {
+      contenedor.innerHTML = '<p class="sin-datos">No hay movimientos con estos filtros.</p>';
+      return;
+    }
+
+    contenedor.innerHTML = movimientos.map(function (m) {
+      const datos = [];
+      if (m.material) datos.push(['Material', m.material]);
+      if (m.volumenReal !== '' && m.volumenReal !== null) datos.push(['Volumen', m.volumenReal + ' m³']);
+      if (m.empresa) datos.push(['Empresa', m.empresa]);
+      if (m.camion) datos.push(['Camión', m.camion + (m.placa ? ' · ' + m.placa : '')]);
+      if (m.origen) datos.push(['Origen', m.origen]);
+      if (m.destino) datos.push(['Destino', m.destino]);
+      if (m.valeProveedor) datos.push(['Vale proveedor', m.valeProveedor]);
+      datos.push(['Checador', m.checador]);
+
+      const etiquetas = [];
+      etiquetas.push('<span class="etiqueta-mov">' + m.tipo + '</span>');
+      // Un viaje entre dos obras aparece en las dos consultas; esta
+      // etiqueta dice qué papel jugó la obra que se está consultando.
+      if (m.papel) etiquetas.push('<span class="etiqueta-mov" data-papel="' + m.papel + '">' + m.papel + '</span>');
+      if (m.cicloAbierto) {
+        etiquetas.push('<span class="etiqueta-mov" data-estado="abierto">Esperando regreso</span>');
+      } else if (m.cicloCompleto) {
+        etiquetas.push('<span class="etiqueta-mov">Ciclo completo</span>');
+      }
+      if (m.valeImagen) etiquetas.push('<span class="etiqueta-mov"><a href="' + m.valeImagen + '" target="_blank" rel="noopener">Ver vale</a></span>');
+      if (m.foto) etiquetas.push('<span class="etiqueta-mov"><a href="' + m.foto + '" target="_blank" rel="noopener">Ver foto</a></span>');
+
+      return '<div class="tarjeta-movimiento" data-tipo="' + m.tipo + '" data-abierto="' + m.cicloAbierto + '">' +
+               '<div class="mov-cabecera">' +
+                 '<span class="mov-vale">' + (m.numeroVale || '—') + '</span>' +
+                 '<span class="mov-hora">' + (m.hora || '') + '</span>' +
+               '</div>' +
+               '<div class="mov-datos">' +
+                 datos.map(function (d) { return '<div><span>' + d[0] + ':</span> <strong>' + d[1] + '</strong></div>'; }).join('') +
+               '</div>' +
+               '<div class="etiquetas-mov">' + etiquetas.join('') + '</div>' +
+             '</div>';
+    }).join('');
+  }
+
+  // ==========================================================================
+  // MENSAJES
+  // ==========================================================================
+  function mostrarToast(mensaje, tipo) {
+    const contenedor = document.getElementById('contenedor-toast');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.dataset.tipo = tipo || 'info';
+    toast.textContent = mensaje;
+    contenedor.appendChild(toast);
+    setTimeout(function () { toast.remove(); }, 4000);
+  }
+</script>
+
+</body>
+</html>

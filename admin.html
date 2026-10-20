@@ -1,0 +1,2227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <script src="config.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel Administrativo</title>
+  <!-- Sin Google Fonts: se usa la tipografía del sistema (ver Styles.html). -->
+  <style>
+  /* ==========================================================================
+     FASE 3 — VARIABLES DE DISEÑO (light y dark)
+     Paleta: gris claro, café, blanco — según lo solicitado.
+     El "ticket perforado" del número de vale es el elemento distintivo:
+     recuerda al vale físico de papel que este sistema reemplaza.
+     ========================================================================== */
+  :root {
+    --color-bg: #FAF9F6;
+    --color-surface: #FFFFFF;
+    --color-surface-alt: #F1EEE8;
+    --color-border: #E2DED5;
+    --color-text: #2B2622;
+    --color-text-muted: #7A7368;
+    --color-cafe: #6F4E37;
+    --color-cafe-oscuro: #4A3222;
+    --color-cafe-claro: #A9805F;
+    --color-exito: #5B7553;
+    --color-alerta: #B4802A;
+    --color-error: #A23E36;
+
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+
+    --sombra-sm: 0 1px 2px rgba(43, 38, 34, 0.06), 0 1px 1px rgba(43, 38, 34, 0.04);
+    --sombra-md: 0 6px 16px rgba(43, 38, 34, 0.10);
+
+    /* Tipografía del sistema: ya está instalada en el teléfono, así que
+       no hay que descargar nada y la app se dibuja completa aunque no
+       haya señal. En Android esto resuelve a Roboto. */
+    --fuente: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+    --transicion-rapida: 150ms ease;
+    --transicion-base: 220ms cubic-bezier(.4, 0, .2, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #1B1714;
+      --color-surface: #241F1A;
+      --color-surface-alt: #2C2620;
+      --color-border: #3A332B;
+      --color-text: #EDEAE2;
+      --color-text-muted: #A69C8D;
+      --color-cafe: #C89B6E;
+      --color-cafe-oscuro: #E4BE93;
+      --color-cafe-claro: #8B6A4A;
+      --color-exito: #8FAE7F;
+      --color-alerta: #E0A94C;
+      --color-error: #E08579;
+      --sombra-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --sombra-md: 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  /* ==========================================================================
+     RESET Y BASE
+     ========================================================================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--fuente);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  h1, h2, h3 { margin: 0; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; }
+  .oculto { display: none !important; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-cafe);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  /* ==========================================================================
+     LAYOUT GENERAL
+     ========================================================================== */
+  .app {
+    max-width: 560px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .encabezado {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .encabezado-marca { display: flex; flex-direction: column; line-height: 1.2; }
+  .encabezado-titulo { font-size: 1.05rem; font-weight: 800; }
+  .encabezado-subtitulo { font-size: 0.75rem; color: var(--color-text-muted); }
+  .encabezado-acciones { display: flex; align-items: center; gap: 8px; }
+
+  .contenido {
+    flex: 1;
+    padding: 16px;
+    padding-bottom: 8px;
+  }
+
+  /* ==========================================================================
+     INDICADOR DE CONEXIÓN
+     ========================================================================== */
+  .estado-conexion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: var(--color-surface-alt);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+  .estado-conexion .punto {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+  .estado-conexion[data-estado="conectado"] .punto { background: var(--color-exito); }
+  .estado-conexion[data-estado="conectado"] { color: var(--color-exito); }
+  .estado-conexion[data-estado="sin-conexion"] .punto { background: var(--color-error); }
+  .estado-conexion[data-estado="sin-conexion"] { color: var(--color-error); }
+  .estado-conexion[data-estado="sincronizando"] .punto {
+    background: var(--color-alerta);
+    animation: pulso 1.1s ease-in-out infinite;
+  }
+  .estado-conexion[data-estado="sincronizando"] { color: var(--color-alerta); }
+
+  @keyframes pulso {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .btn-icono {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transicion-rapida), transform var(--transicion-rapida);
+  }
+  .btn-icono:active { transform: scale(0.93); }
+  .btn-icono svg { width: 18px; height: 18px; }
+
+  .badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--color-error);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ==========================================================================
+     TARJETAS / SECCIONES
+     ========================================================================== */
+  .tarjeta {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--sombra-sm);
+    padding: 18px;
+    margin-bottom: 14px;
+    animation: aparecer var(--transicion-base) ease;
+  }
+  @keyframes aparecer {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tarjeta-titulo {
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    margin-bottom: 14px;
+  }
+
+  /* ==========================================================================
+     CAMPOS DE FORMULARIO
+     ========================================================================== */
+  .campo { margin-bottom: 16px; }
+  .campo:last-child { margin-bottom: 0; }
+
+  .campo label,
+  .etiqueta-estatica {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  .fila-doble {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 1rem;
+    transition: border-color var(--transicion-rapida);
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'><path d='M5 7.5L10 12.5L15 7.5' stroke='%237A7368' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 38px;
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { border-color: var(--color-cafe); }
+  input::placeholder, textarea::placeholder { color: var(--color-text-muted); opacity: 0.7; }
+
+  .valor-estatico {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ayuda {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+  }
+
+  .ayuda-ubicacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .ayuda-ubicacion .ayuda { margin-top: 0; flex: 1; }
+  .btn-enlace {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 4px 0;
+    color: var(--color-cafe);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* Ticket del número de vale — el elemento distintivo de la interfaz */
+  .vale-ticket {
+    position: relative;
+    background: var(--color-surface-alt);
+    border: 1.5px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px 20px;
+    overflow: hidden;
+    text-align: center;
+  }
+  .vale-ticket::before,
+  .vale-ticket::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    background: var(--color-bg);
+    border-radius: 50%;
+    transform: translateY(-50%);
+  }
+  .vale-ticket::before { left: -8px; }
+  .vale-ticket::after { right: -8px; }
+  .vale-numero {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-cafe-oscuro);
+  }
+
+  /* ==========================================================================
+     SEGMENTADO ENTRADA / SALIDA
+     ========================================================================== */
+  .segmentado {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .segmentado-boton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 64px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    font-weight: 800;
+    transition: var(--transicion-base);
+  }
+  .segmentado-boton svg { width: 20px; height: 20px; }
+  .segmentado-boton[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+    box-shadow: var(--sombra-md);
+  }
+  .segmentado-chico .segmentado-boton {
+    min-height: 46px;
+    font-size: 0.9rem;
+  }
+
+  /* ==========================================================================
+     BLOQUE CAMIÓN (QR / buscador / info)
+     ========================================================================== */
+  .btn-secundario {
+    width: 100%;
+    min-height: 48px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 700;
+    transition: border-color var(--transicion-rapida);
+  }
+  .btn-secundario:active { border-color: var(--color-cafe); }
+
+  .lista-resultados {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+  }
+  .lista-resultados li {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.92rem;
+  }
+  .lista-resultados li:active { background: var(--color-surface-alt); }
+
+  .tarjeta-info {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+  }
+  .info-fila {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9rem;
+  }
+  .info-fila:last-of-type { border-bottom: none; }
+  .info-fila span { color: var(--color-text-muted); }
+
+  /* ==========================================================================
+     FOTOGRAFÍA
+     ========================================================================== */
+  .foto-vista-previa {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    margin-top: 10px;
+    border: 1px solid var(--color-border);
+  }
+
+  /* ==========================================================================
+     PIE FIJO / BOTÓN GUARDAR
+     ========================================================================== */
+  .pie-fijo {
+    position: sticky;
+    bottom: 0;
+    padding: 14px 16px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--color-bg) 65%, transparent);
+  }
+  .btn-guardar {
+    width: 100%;
+    min-height: 56px;
+    border-radius: var(--radius-md);
+    border: none;
+    background: var(--color-cafe-oscuro);
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 800;
+    box-shadow: var(--sombra-md);
+    transition: var(--transicion-base);
+  }
+  .btn-guardar:active { transform: scale(0.98); }
+  .btn-guardar:disabled { opacity: 0.5; box-shadow: none; }
+
+  /* ==========================================================================
+     MODAL DE CÁMARA (foto / QR)
+     ========================================================================== */
+  .contenedor-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 17, 14, 0.75);
+    padding: 20px;
+  }
+  /* Nombradas así por la cámara en vivo original; hoy las usa el modal
+     de vista previa del ticket. */
+  .modal-camara-caja {
+    width: 100%;
+    max-width: 440px;
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    box-shadow: var(--sombra-md);
+  }
+  /* Casilla de ciclo completo: área táctil amplia, para tocarla de prisa. */
+  .casilla {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    margin-top: 12px;
+    padding: 0 14px;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .casilla input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    accent-color: var(--color-cafe);
+    margin: 0;
+  }
+  .casilla:has(input:checked) {
+    border-color: var(--color-cafe);
+    background: var(--color-surface-alt);
+  }
+  .opcional {
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-size: 0.85em;
+  }
+
+  /* El aviso del vale de cierre cambia de color según el resultado de la
+     verificación: es el dato que liga los dos movimientos del ciclo. */
+  /* Nota que explica para qué sirve el campo: se distingue del texto de
+     estado (GPS, validaciones) para que no se confundan entre sí. */
+  .nota-fija {
+    display: block;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .ayuda[data-estado="ok"] { color: var(--color-exito); font-weight: 700; }
+  .ayuda[data-estado="error"] { color: var(--color-error); font-weight: 700; }
+  .ayuda[data-estado="aviso"] { color: var(--color-cafe-oscuro); font-weight: 700; }
+
+  .grid-camiones {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .btn-camion {
+    min-height: 56px;
+    padding: 8px 6px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 800;
+    font-size: 0.95rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+  .btn-camion .placa-mini {
+    display: block;
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+  .btn-camion[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+  }
+  .btn-camion[aria-pressed="true"] .placa-mini { color: rgba(255,255,255,0.85); }
+
+  .oculto-total {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    left: -9999px;
+  }
+  .acciones-secundarias-ticket {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  /* Oculta de verdad, sin depender de la especificidad de cada regla.
+     No se reutiliza .oculto-total para esto: aquella mueve el elemento fuera
+     de la pantalla con position/left, y la pantalla del PIN define su propio
+     position:fixed e inset:0 — se pisaban entre sí y la pantalla seguía
+     encima de la app. display:none no tiene ese problema. */
+  .pantalla-oculta { display: none !important; }
+
+  /* ==========================================================================
+     PANTALLA DE ENTRADA CON PIN (app de captura)
+     ========================================================================== */
+  .pantalla-pin {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: var(--color-bg);
+    z-index: 50;
+  }
+
+  .tarjeta-pin {
+    width: 100%;
+    max-width: 340px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 28px 22px;
+    box-shadow: var(--sombra-md);
+    text-align: center;
+  }
+
+  .marca-pin { margin-bottom: 22px; }
+
+  .marca-pin-titulo {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--color-text);
+  }
+
+  .marca-pin-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .tarjeta-pin label {
+    display: block;
+    text-align: left;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  /* Dígitos grandes y separados: esto se teclea a la intemperie, a veces con
+     guantes, y hay que poder ver cuántos se llevan escritos. */
+  .campo-pin {
+    width: 100%;
+    min-height: 58px;
+    text-align: center;
+    font-size: 1.6rem;
+    letter-spacing: 0.35em;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .error-pin {
+    min-height: 20px;
+    margin-top: 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--color-error);
+  }
+
+  .tarjeta-pin .ayuda {
+    display: block;
+    margin-top: 4px;
+    text-align: center;
+  }
+
+  /* Nombre del checador ya identificado: se ve, no se edita. */
+  .fila-checador {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .fila-checador input[readonly] {
+    flex: 1;
+    background: var(--color-surface-alt);
+    font-weight: 700;
+    cursor: default;
+  }
+
+  .fila-checador .btn-enlace { flex: 0 0 auto; }
+  .ticket-imagen {
+    display: block;
+    width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    image-rendering: pixelated; /* nítido a 1:1 en vez de borroso al escalar */
+  }
+  .modal-camara-acciones {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  /* ==========================================================================
+     TOASTS (mensajes de validación / estado)
+     ========================================================================== */
+  .contenedor-toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 528px;
+    margin: 0 auto;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border-left: 4px solid var(--color-text-muted);
+    box-shadow: var(--sombra-md);
+    font-size: 0.88rem;
+    animation: deslizar var(--transicion-base) ease;
+  }
+  .toast[data-tipo="exito"] { border-left-color: var(--color-exito); }
+  .toast[data-tipo="error"] { border-left-color: var(--color-error); }
+  .toast[data-tipo="info"] { border-left-color: var(--color-alerta); }
+  @keyframes deslizar {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (min-width: 400px) {
+    .contenedor-modal { padding: 24px; }
+  }
+</style>
+
+  <style>
+  /* ==========================================================================
+     PANEL ADMINISTRATIVO — layout más ancho que la app de captura (uso de
+     escritorio/tablet), pero comparte paleta y tokens con Styles.html.
+     ========================================================================== */
+  .admin-app {
+    max-width: 1100px;
+    margin: 0 auto;
+    min-height: 100vh;
+    padding: 20px 20px 60px;
+  }
+
+  /* ---------------- LOGIN ---------------- */
+  .pantalla-login {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .tarjeta-login {
+    width: 100%;
+    max-width: 360px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--sombra-md);
+    padding: 28px 24px;
+    text-align: center;
+  }
+  .tarjeta-login h1 {
+    font-size: 1.1rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+  .tarjeta-login p {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    margin: 0 0 18px;
+  }
+  .tarjeta-login input {
+    text-align: center;
+    letter-spacing: 0.1em;
+  }
+  .error-login {
+    margin-top: 10px;
+    font-size: 0.82rem;
+    color: var(--color-error);
+    min-height: 1.2em;
+  }
+
+  /* ---------------- ENCABEZADO DEL PANEL ---------------- */
+  .admin-encabezado {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .admin-encabezado h1 {
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+  .admin-encabezado .subt {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+  }
+
+  /* ---------------- PESTAÑAS ---------------- */
+  .pestanas {
+    display: flex;
+    gap: 6px;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 18px;
+    overflow-x: auto;
+  }
+  .pestana {
+    padding: 10px 16px;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    font-weight: 700;
+    font-size: 0.88rem;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .pestana[aria-selected="true"] {
+    color: var(--color-cafe-oscuro);
+    border-bottom-color: var(--color-cafe);
+  }
+  .vista-pestana.oculto { display: none; }
+
+  /* ---------------- SELECTOR DE CATÁLOGO (chips) ---------------- */
+  .chips-catalogo {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .chip-catalogo {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+  }
+  .chip-catalogo[aria-selected="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+  }
+
+  /* ---------------- BARRA DE ACCIONES / FILTROS ---------------- */
+  .barra-acciones {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .barra-filtros {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 14px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+  }
+  .barra-filtros .campo { margin-bottom: 0; }
+  .barra-filtros .campo label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+  }
+  .fila-botones-filtro {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn-primario, .btn-secundario-admin {
+    min-height: 40px;
+    padding: 0 16px;
+    border-radius: var(--radius-sm);
+    font-weight: 700;
+    font-size: 0.85rem;
+    border: 1.5px solid transparent;
+  }
+  .btn-primario {
+    background: var(--color-cafe-oscuro);
+    color: #fff;
+  }
+  .btn-secundario-admin {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+  .btn-peligro {
+    background: none;
+    border: none;
+    color: var(--color-error);
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+  }
+  .btn-enlace-admin {
+    background: none;
+    border: none;
+    color: var(--color-cafe);
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+  }
+
+  /* ---------------- TABLA DE DATOS ---------------- */
+  .contenedor-tabla {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+  }
+  .tabla-datos {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+  .tabla-datos th {
+    text-align: left;
+    padding: 10px 14px;
+    background: var(--color-surface-alt);
+    color: var(--color-text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    position: sticky;
+    top: 0;
+  }
+  .tabla-datos td {
+    padding: 10px 14px;
+    border-top: 1px solid var(--color-border);
+  }
+  .tabla-datos tbody tr:hover { background: var(--color-surface-alt); }
+  .tabla-datos a {
+    color: var(--color-cafe);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .tabla-datos a:hover { text-decoration: underline; }
+  .celda-vacia {
+    padding: 30px 14px;
+    text-align: center;
+    color: var(--color-text-muted);
+  }
+  .badge-tipo {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+  .badge-tipo[data-valor="Interno"], .badge-tipo[data-valor="ENTRADA"] {
+    background: var(--color-surface-alt);
+    color: var(--color-exito);
+  }
+  .badge-tipo[data-valor="Externo"], .badge-tipo[data-valor="SALIDA"] {
+    background: var(--color-surface-alt);
+    color: var(--color-cafe-oscuro);
+  }
+
+  /* ---------------- MODAL DE FORMULARIO (agregar/editar catálogo) ---------------- */
+  .modal-fondo {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 17, 14, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 80;
+  }
+  .modal-caja {
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    box-shadow: var(--sombra-md);
+  }
+  .modal-caja h3 { font-size: 1rem; margin-bottom: 16px; }
+  .modal-caja .campo { margin-bottom: 14px; }
+  .modal-caja .campo label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+  .modal-acciones {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .modal-acciones button { flex: 1; }
+
+  /* ---------------- DASHBOARD ---------------- */
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .tarjeta-kpi {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+  .tarjeta-kpi .valor-kpi {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--color-cafe-oscuro);
+    font-variant-numeric: tabular-nums;
+  }
+  .tarjeta-kpi .etiqueta-kpi {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-weight: 700;
+  }
+
+  .grid-graficas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .tarjeta-grafica {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+  }
+  .tarjeta-grafica h3 {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 8px;
+  }
+  .lienzo-grafica {
+    width: 100%;
+    height: 260px;
+  }
+
+  @media print {
+    .no-imprimir { display: none !important; }
+    .admin-app { padding: 0; max-width: none; }
+  }
+
+  /* ==========================================================================
+     IDENTIDAD DE QUIEN ENTRÓ AL PANEL
+     ========================================================================== */
+  .identidad-admin {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .nombre-admin {
+    font-weight: 700;
+    color: var(--color-text);
+    font-size: 0.92rem;
+  }
+
+  /* El rol se ve siempre: quien solo consulta debe saberlo antes de
+     intentar un cambio, no después de que el servidor se lo niegue. */
+  .insignia-rol {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+  }
+
+  .insignia-rol[data-rol="total"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+  }
+
+  .insignia-rol[data-rol="consulta"] {
+    background: var(--color-surface-alt);
+  }
+</style>
+
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+  <link rel="icon" type="image/png" sizes="192x192" href="icono-192.png">
+  <link rel="apple-touch-icon" href="icono-180.png">
+  <meta name="theme-color" content="#6F4E37">
+</head>
+<body>
+
+  <!-- ================= LOGIN ================= -->
+  <div class="pantalla-login" id="pantalla-login">
+    <div class="tarjeta-login">
+      <h1>Panel Administrativo</h1>
+      <p>Registro de Viajes — Acarreo de materiales</p>
+      <div class="campo">
+        <input type="password" id="admin-password" placeholder="Tu contraseña" autocomplete="current-password">
+      </div>
+      <button type="button" class="btn-guardar" id="btn-entrar">Entrar</button>
+      <div class="error-login" id="error-login"></div>
+    </div>
+  </div>
+
+  <!-- ================= PANEL (oculto hasta iniciar sesión) ================= -->
+  <div class="admin-app oculto" id="panel-admin">
+
+    <div class="admin-encabezado">
+      <div>
+        <h1>Panel Administrativo</h1>
+        <span class="subt">Registro de Viajes — Acarreo de materiales</span>
+      </div>
+      <div class="identidad-admin">
+        <span class="nombre-admin" id="nombre-admin">—</span>
+        <span class="insignia-rol" id="insignia-rol"></span>
+        <button type="button" class="btn-secundario-admin" id="btn-cerrar-sesion">Cerrar sesión</button>
+      </div>
+    </div>
+
+    <div class="pestanas no-imprimir" role="tablist">
+      <button type="button" class="pestana" id="tab-catalogos" data-vista="catalogos" aria-selected="true">Catálogos</button>
+      <button type="button" class="pestana" id="tab-registros" data-vista="registros" aria-selected="false">Registros</button>
+      <button type="button" class="pestana" id="tab-dashboard" data-vista="dashboard" aria-selected="false">Dashboard</button>
+    </div>
+
+    <!-- ================= VISTA: CATÁLOGOS ================= -->
+    <section class="vista-pestana" id="vista-catalogos">
+      <div class="chips-catalogo no-imprimir" id="chips-catalogo"></div>
+
+      <div class="barra-acciones no-imprimir">
+        <span class="subt" id="titulo-catalogo-actual">—</span>
+        <button type="button" class="btn-primario" id="btn-agregar-catalogo">+ Agregar</button>
+      </div>
+
+      <div class="contenedor-tabla">
+        <table class="tabla-datos" id="tabla-catalogo">
+          <thead><tr id="encabezados-catalogo"></tr></thead>
+          <tbody id="cuerpo-catalogo"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= VISTA: REGISTROS ================= -->
+    <section class="vista-pestana oculto" id="vista-registros">
+      <div class="barra-filtros no-imprimir">
+        <div class="campo">
+          <label for="filtro-checador">Checador</label>
+          <select id="filtro-checador"><option value="">Todos</option></select>
+        </div>
+        <div class="campo">
+          <label for="filtro-tipo">Tipo</label>
+          <select id="filtro-tipo">
+            <option value="">Todos</option>
+            <option value="ENTRADA">Entrada</option>
+            <option value="SALIDA">Salida</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="filtro-empresa">Empresa</label>
+          <select id="filtro-empresa"><option value="">Todas</option></select>
+        </div>
+        <div class="campo">
+          <label for="filtro-obra">Obra</label>
+          <select id="filtro-obra"><option value="">Todas</option></select>
+        </div>
+        <div class="campo">
+          <label for="filtro-fecha-desde">Desde</label>
+          <input type="date" id="filtro-fecha-desde">
+        </div>
+        <div class="campo">
+          <label for="filtro-fecha-hasta">Hasta</label>
+          <input type="date" id="filtro-fecha-hasta">
+        </div>
+        <div class="fila-botones-filtro">
+          <button type="button" class="btn-primario" id="btn-filtrar-registros">Filtrar</button>
+          <button type="button" class="btn-secundario-admin" id="btn-limpiar-filtros">Limpiar</button>
+          <button type="button" class="btn-secundario-admin" id="btn-exportar-excel">Exportar a Excel</button>
+          <button type="button" class="btn-secundario-admin" id="btn-exportar-pdf">Exportar a PDF</button>
+        </div>
+      </div>
+
+      <span class="subt no-imprimir" id="contador-registros"></span>
+
+      <div class="contenedor-tabla" style="margin-top:10px;">
+        <table class="tabla-datos">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Hora</th><th>Checador</th><th>Tipo</th><th>Material</th>
+              <th>Empresa</th><th>Camión</th><th>Volumen</th><th>Vale</th><th>Imágenes</th><th class="no-imprimir"></th>
+            </tr>
+          </thead>
+          <tbody id="cuerpo-registros"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= VISTA: DASHBOARD ================= -->
+    <section class="vista-pestana oculto" id="vista-dashboard">
+      <div class="barra-filtros no-imprimir">
+        <div class="campo">
+          <label for="dash-obra">Obra</label>
+          <select id="dash-obra"><option value="">Todas</option></select>
+        </div>
+        <div class="campo">
+          <label for="dash-fecha-desde">Desde</label>
+          <input type="date" id="dash-fecha-desde">
+        </div>
+        <div class="campo">
+          <label for="dash-fecha-hasta">Hasta</label>
+          <input type="date" id="dash-fecha-hasta">
+        </div>
+        <div class="fila-botones-filtro">
+          <button type="button" class="btn-primario" id="btn-actualizar-dashboard">Actualizar</button>
+          <span class="subt" id="dash-estado"></span>
+        </div>
+      </div>
+
+      <div class="kpis" id="dash-kpis"></div>
+
+      <div class="grid-graficas">
+        <div class="tarjeta-grafica">
+          <h3>Viajes por día</h3>
+          <div id="grafica-viajes-dia" class="lienzo-grafica"></div>
+        </div>
+        <div class="tarjeta-grafica">
+          <h3>Entradas vs. Salidas</h3>
+          <div id="grafica-entradas-salidas" class="lienzo-grafica"></div>
+        </div>
+        <div class="tarjeta-grafica">
+          <h3>Viajes por empresa</h3>
+          <div id="grafica-viajes-empresa" class="lienzo-grafica"></div>
+        </div>
+        <div class="tarjeta-grafica">
+          <h3>Material transportado (m³)</h3>
+          <div id="grafica-material" class="lienzo-grafica"></div>
+        </div>
+        <div class="tarjeta-grafica">
+          <h3>Volumen por obra (m³)</h3>
+          <div id="grafica-volumen-obra" class="lienzo-grafica"></div>
+        </div>
+        <div class="tarjeta-grafica">
+          <h3>Volumen por banco (m³)</h3>
+          <div id="grafica-volumen-banco" class="lienzo-grafica"></div>
+        </div>
+        <div class="tarjeta-grafica">
+          <h3>Capacidad utilizada por camión (%)</h3>
+          <div id="grafica-capacidad" class="lienzo-grafica"></div>
+        </div>
+        <div class="tarjeta-grafica">
+          <h3>Productividad por checador (viajes)</h3>
+          <div id="grafica-checador" class="lienzo-grafica"></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ================= MODAL: AGREGAR / EDITAR FILA DE CATÁLOGO ================= -->
+  <div class="modal-fondo oculto" id="modal-catalogo">
+    <div class="modal-caja">
+      <h3 id="modal-catalogo-titulo">Agregar</h3>
+      <form id="form-catalogo"></form>
+      <div class="modal-acciones">
+        <button type="button" class="btn-secundario-admin" id="btn-cancelar-catalogo">Cancelar</button>
+        <button type="submit" form="form-catalogo" class="btn-primario" id="btn-guardar-catalogo">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="contenedor-toast" id="contenedor-toast" aria-live="assertive"></div>
+
+  <script>
+  // ============================================================================
+  // CLIENTE DE API — reemplazo de google.script.run
+  // ============================================================================
+  // Cuando la app vive dentro de Apps Script, el objeto google.script.run ya
+  // existe y permite llamar funciones del servidor. Al mover la app a un
+  // hosting propio (necesario para poder imprimir por Bluetooth), ese objeto
+  // desaparece.
+  //
+  // En vez de reescribir las cientos de llamadas repartidas por el proyecto,
+  // aquí se construye un objeto con la MISMA forma que google.script.run,
+  // pero que por dentro manda una petición al backend. Así todo el código
+  // que ya funcionaba sigue igual, y el mismo archivo sirve en los dos
+  // escenarios: si google.script.run ya existe, esto no hace nada.
+  //
+  // CONFIGURACIÓN: la URL de la Web App de Apps Script (la que termina en
+  // /exec) se pone en el archivo config.js, al lado de las páginas. Así se
+  // puede cambiar sin volver a generar nada: se edita esa línea y listo.
+  // El valor de abajo solo se usa si config.js no existe.
+  // ============================================================================
+
+  const URL_BACKEND = (typeof window !== 'undefined' && window.URL_BACKEND_ACARREO)
+    ? window.URL_BACKEND_ACARREO
+    : 'PON_AQUI_LA_URL_DE_TU_WEB_APP_QUE_TERMINA_EN_EXEC';
+
+  (function () {
+    // Si ya existe (la app corriendo dentro de Apps Script), no se toca nada.
+    if (window.google && window.google.script && window.google.script.run) return;
+
+    /**
+     * Manda una operación al backend.
+     *
+     * El tipo de contenido es "text/plain" a propósito: con
+     * "application/json" el navegador hace una consulta previa (preflight)
+     * que Apps Script no responde, y la llamada falla. El contenido va en
+     * JSON igual; solo cambia la etiqueta con la que viaja.
+     */
+    function llamarBackend(operacion, argumentos) {
+      return fetch(URL_BACKEND, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ operacion: operacion, argumentos: argumentos })
+      }).then(function (respuesta) {
+        if (!respuesta.ok) throw new Error('El servidor respondió ' + respuesta.status);
+        return respuesta.json();
+      });
+    }
+
+    /**
+     * Imita el encadenamiento de google.script.run:
+     *   google.script.run.withSuccessHandler(f).withFailureHandler(g).operacion(args)
+     *
+     * Cada llamada a withSuccessHandler/withFailureHandler devuelve un objeto
+     * nuevo, igual que el original, para que se puedan encadenar en
+     * cualquier orden sin pisarse entre sí.
+     */
+    function construirCorredor(alExito, alFallar) {
+      const corredor = {
+        withSuccessHandler: function (f) { return construirCorredor(f, alFallar); },
+        withFailureHandler: function (f) { return construirCorredor(alExito, f); },
+        withUserObject: function () { return corredor; } // existe por compatibilidad
+      };
+
+      // Cada operación permitida se expone como método, igual que el original.
+      OPERACIONES_DISPONIBLES.forEach(function (operacion) {
+        corredor[operacion] = function () {
+          const argumentos = Array.prototype.slice.call(arguments);
+
+          llamarBackend(operacion, argumentos)
+            .then(function (resultado) { if (alExito) alExito(resultado); })
+            .catch(function (err) {
+              if (alFallar) {
+                alFallar(err);
+              } else {
+                // Sin manejador de error, al menos queda registro en la
+                // consola en vez de desaparecer en silencio.
+                console.error('Error llamando a ' + operacion + ':', err);
+              }
+            });
+        };
+      });
+
+      // Red de seguridad: si el código llama a una operación que no está en
+      // la lista de arriba, el objeto no tendría ese método y el navegador
+      // soltaría un "no es una función" sin decir cuál ni por qué. Esto ya
+      // estuvo a punto de romper el login: la operación existía en Code.gs
+      // pero faltaba aquí. Con esta trampa el error dice exactamente qué
+      // agregar y dónde.
+      if (typeof Proxy === 'function') {
+        return new Proxy(corredor, {
+          get: function (objetivo, propiedad) {
+            if (propiedad in objetivo) return objetivo[propiedad];
+            if (typeof propiedad !== 'string') return undefined;
+            throw new Error(
+              'La operación "' + propiedad + '" no está dada de alta en ApiCliente.html. ' +
+              'Agrégala a OPERACIONES_DISPONIBLES (y revisa que exista en OPERACIONES_API de Code.gs).'
+            );
+          }
+        });
+      }
+
+      return corredor;
+    }
+
+    // Debe coincidir con OPERACIONES_API de Code.gs.
+    const OPERACIONES_DISPONIBLES = [
+      'obtenerCatalogos', 'obtenerInfoValeObra', 'guardarRegistro',
+      'guardarRegistrosEnLote', 'verificarValeCiclo',
+      'iniciarSesionChecador', 'renovarSesionChecador',
+      'iniciarSesionAdmin', 'cerrarSesionAdmin', 'obtenerEsquemasCatalogos',
+      'listarFilasCatalogo', 'agregarFilaCatalogo', 'editarFilaCatalogo',
+      'eliminarFilaCatalogo', 'listarRegistros', 'eliminarRegistro',
+      'exportarRegistrosExcel', 'exportarRegistrosPDF', 'obtenerDatosDashboard',
+      'obtenerDatosEntradaObra', 'iniciarSesionEncargado',
+      'cerrarSesionEncargado', 'obtenerMovimientosEncargado'
+    ];
+
+    window.google = window.google || {};
+    window.google.script = window.google.script || {};
+    window.google.script.run = construirCorredor(null, null);
+  })();
+</script>
+
+  <script>
+  // ============================================================================
+  // PANEL ADMINISTRATIVO — Fase 8
+  // ============================================================================
+  // - Login por contraseña (verificada en el backend) → token de sesión
+  //   guardado en sessionStorage (se pierde solo al cerrar la pestaña).
+  // - Cada llamada administrativa reenvía el token; el backend la rechaza
+  //   si no es válida o ya expiró, sin importar qué pantalla se ve en el
+  //   navegador — la protección vive en el servidor, no solo en la UI.
+  // - CRUD de catálogos 100% dinámico: las columnas y la "clave" de cada
+  //   catálogo vienen de ESQUEMA_CATALOGOS (Code.gs), así que agregar un
+  //   catálogo nuevo ahí es suficiente para que aparezca aquí también.
+  // ============================================================================
+
+  const estadoAdmin = {
+    token: null,
+    nombre: '',
+    rol: 'Consulta',   // 'Total' = puede modificar; cualquier otra cosa = solo ve
+    esquemas: null,
+    catalogoActual: null,
+    filasCatalogoActual: [],
+    modoModal: 'agregar', // 'agregar' | 'editar'
+    claveOriginalEdicion: null,
+    registrosActuales: [],
+    ultimosFiltros: {},
+    dashboardCargado: false,
+    googleChartsListo: false
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('btn-entrar').addEventListener('click', intentarIniciarSesion);
+    document.getElementById('admin-password').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') intentarIniciarSesion();
+    });
+    document.getElementById('btn-cerrar-sesion').addEventListener('click', cerrarSesion);
+
+    configurarPestanas();
+    configurarModalCatalogo();
+    configurarVistaRegistros();
+    configurarVistaDashboard();
+
+    const tokenGuardado = sessionStorage.getItem('admin_token');
+    if (tokenGuardado) {
+      estadoAdmin.token = tokenGuardado;
+      estadoAdmin.nombre = sessionStorage.getItem('admin_nombre') || '';
+      estadoAdmin.rol = sessionStorage.getItem('admin_rol') || 'Consulta';
+      mostrarPanelPrincipal();
+    }
+  });
+
+  // ==========================================================================
+  // SESIÓN
+  // ==========================================================================
+  function intentarIniciarSesion() {
+    const password = document.getElementById('admin-password').value;
+    const error = document.getElementById('error-login');
+    error.textContent = '';
+    if (!password) { error.textContent = 'Escribe la contraseña.'; return; }
+
+    const boton = document.getElementById('btn-entrar');
+    boton.disabled = true;
+    boton.textContent = 'Entrando…';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        boton.disabled = false;
+        boton.textContent = 'Entrar';
+        if (!respuesta.exito) { error.textContent = respuesta.error; return; }
+        estadoAdmin.token = respuesta.token;
+        estadoAdmin.nombre = respuesta.nombre || '';
+        estadoAdmin.rol = respuesta.rol || 'Consulta';
+        sessionStorage.setItem('admin_token', respuesta.token);
+        sessionStorage.setItem('admin_nombre', estadoAdmin.nombre);
+        sessionStorage.setItem('admin_rol', estadoAdmin.rol);
+        if (respuesta.aviso) mostrarToast(respuesta.aviso, 'error');
+        mostrarPanelPrincipal();
+      })
+      .withFailureHandler(function (err) {
+        boton.disabled = false;
+        boton.textContent = 'Entrar';
+        error.textContent = 'No se pudo conectar: ' + err.message;
+      })
+      .iniciarSesionAdmin(password);
+  }
+
+  /**
+   * ¿Esta persona puede modificar?
+   *
+   * Esto decide lo que SE VE, no lo que SE PUEDE. El permiso de verdad lo
+   * aplica el servidor en cada operación que escribe: esconder un botón es
+   * comodidad, y el panel corre en el navegador de cada quien.
+   */
+  function puedeModificar() {
+    return estadoAdmin.rol === 'Total';
+  }
+
+  function mostrarPanelPrincipal() {
+    document.getElementById('pantalla-login').classList.add('oculto');
+    document.getElementById('panel-admin').classList.remove('oculto');
+    document.getElementById('admin-password').value = '';
+    aplicarPermisosEnPantalla();
+    cargarEsquemas();
+  }
+
+  function aplicarPermisosEnPantalla() {
+    document.getElementById('nombre-admin').textContent = estadoAdmin.nombre || '—';
+
+    const insignia = document.getElementById('insignia-rol');
+    insignia.textContent = puedeModificar() ? 'Acceso total' : 'Solo consulta';
+    insignia.dataset.rol = puedeModificar() ? 'total' : 'consulta';
+
+    // El botón de agregar desaparece para quien solo consulta; los de
+    // editar y eliminar ni siquiera se crean (ver renderizar*).
+    const btnAgregar = document.getElementById('btn-agregar-catalogo');
+    if (btnAgregar) btnAgregar.classList.toggle('oculto', !puedeModificar());
+  }
+
+  function cerrarSesion() {
+    if (estadoAdmin.token) {
+      google.script.run.cerrarSesionAdmin(estadoAdmin.token);
+    }
+    sessionStorage.removeItem('admin_token');
+    sessionStorage.removeItem('admin_nombre');
+    sessionStorage.removeItem('admin_rol');
+    estadoAdmin.token = null;
+    document.getElementById('panel-admin').classList.add('oculto');
+    document.getElementById('pantalla-login').classList.remove('oculto');
+  }
+
+  // Se llama al inicio de cada .withSuccessHandler(): si el token ya expiró,
+  // regresa a la pantalla de login en vez de mostrar tablas vacías o errores
+  // confusos. Devuelve true si ya se manejó (para cortar la función llamante).
+  function manejarPosibleSesionExpirada(respuesta) {
+    if (!respuesta || respuesta.exito) return false;
+
+    // El servidor rechazó la operación por falta de permiso. Puede pasar
+    // aunque la pantalla no muestre el botón: si a alguien le cambian el rol
+    // mientras tiene el panel abierto, su sesión sigue viva con el rol
+    // viejo. Aquí se corrige lo que se ve y se dice por qué.
+    if (respuesta.sinPermiso) {
+      estadoAdmin.rol = 'Consulta';
+      sessionStorage.setItem('admin_rol', 'Consulta');
+      aplicarPermisosEnPantalla();
+      mostrarToast(respuesta.error, 'error');
+      return true;
+    }
+
+    if (respuesta.sesionInvalida ||
+        (respuesta.error && respuesta.error.indexOf('sesión expiró') !== -1)) {
+      cerrarSesion();
+      mostrarToast('Tu sesión expiró. Vuelve a iniciar sesión.', 'error');
+      return true;
+    }
+    return false;
+  }
+
+  // ==========================================================================
+  // PESTAÑAS
+  // ==========================================================================
+  function configurarPestanas() {
+    const botones = document.querySelectorAll('.pestana');
+    botones.forEach(function (boton) {
+      boton.addEventListener('click', function () {
+        botones.forEach(function (b) { b.setAttribute('aria-selected', 'false'); });
+        boton.setAttribute('aria-selected', 'true');
+
+        document.querySelectorAll('.vista-pestana').forEach(function (v) { v.classList.add('oculto'); });
+        document.getElementById('vista-' + boton.dataset.vista).classList.remove('oculto');
+
+        if (boton.dataset.vista === 'registros' && estadoAdmin.registrosActuales.length === 0) {
+          cargarOpcionesFiltro();
+        }
+        if (boton.dataset.vista === 'dashboard' && !estadoAdmin.dashboardCargado) {
+          cargarDashboard();
+        }
+      });
+    });
+  }
+
+  // ==========================================================================
+  // CATÁLOGOS
+  // ==========================================================================
+  function cargarEsquemas() {
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+        estadoAdmin.esquemas = respuesta.esquemas;
+        construirChipsCatalogo();
+      })
+      .withFailureHandler(function (err) { mostrarToast('No se pudieron cargar los catálogos: ' + err.message, 'error'); })
+      .obtenerEsquemasCatalogos(estadoAdmin.token);
+  }
+
+  function construirChipsCatalogo() {
+    const contenedor = document.getElementById('chips-catalogo');
+    contenedor.innerHTML = '';
+
+    Object.keys(estadoAdmin.esquemas).forEach(function (nombreHoja) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip-catalogo';
+      chip.textContent = nombreHoja;
+      chip.dataset.hoja = nombreHoja;
+      chip.setAttribute('aria-selected', 'false');
+      chip.addEventListener('click', function () { seleccionarCatalogo(nombreHoja); });
+      contenedor.appendChild(chip);
+    });
+
+    const primerCatalogo = Object.keys(estadoAdmin.esquemas)[0];
+    if (primerCatalogo) seleccionarCatalogo(primerCatalogo);
+  }
+
+  function seleccionarCatalogo(nombreHoja) {
+    estadoAdmin.catalogoActual = nombreHoja;
+    document.querySelectorAll('.chip-catalogo').forEach(function (chip) {
+      chip.setAttribute('aria-selected', chip.dataset.hoja === nombreHoja ? 'true' : 'false');
+    });
+    document.getElementById('titulo-catalogo-actual').textContent = nombreHoja;
+    cargarFilasCatalogo();
+  }
+
+  function cargarFilasCatalogo() {
+    document.getElementById('cuerpo-catalogo').innerHTML = '<tr><td class="celda-vacia" colspan="11">Cargando…</td></tr>';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+        estadoAdmin.filasCatalogoActual = respuesta.datos;
+        renderizarTablaCatalogo();
+      })
+      .withFailureHandler(function (err) { mostrarToast('No se pudo cargar: ' + err.message, 'error'); })
+      .listarFilasCatalogo(estadoAdmin.catalogoActual, estadoAdmin.token);
+  }
+
+  function renderizarTablaCatalogo() {
+    const esquema = estadoAdmin.esquemas[estadoAdmin.catalogoActual];
+    document.getElementById('encabezados-catalogo').innerHTML =
+      esquema.columnas.map(function (c) { return '<th>' + c + '</th>'; }).join('') + '<th class="no-imprimir"></th>';
+
+    const cuerpo = document.getElementById('cuerpo-catalogo');
+
+    if (estadoAdmin.filasCatalogoActual.length === 0) {
+      cuerpo.innerHTML = '<tr><td class="celda-vacia" colspan="' + (esquema.columnas.length + 1) + '">Sin registros todavía.</td></tr>';
+      return;
+    }
+
+    cuerpo.innerHTML = '';
+    estadoAdmin.filasCatalogoActual.forEach(function (fila) {
+      const tr = document.createElement('tr');
+
+      esquema.columnas.forEach(function (columna) {
+        const td = document.createElement('td');
+        if (columna === 'Tipo' && esquema.opciones && esquema.opciones.Tipo) {
+          td.innerHTML = '<span class="badge-tipo" data-valor="' + fila[columna] + '">' + fila[columna] + '</span>';
+        } else {
+          td.textContent = fila[columna] !== undefined ? fila[columna] : '';
+        }
+        tr.appendChild(td);
+      });
+
+      const tdAcciones = document.createElement('td');
+      tdAcciones.className = 'no-imprimir';
+
+      if (puedeModificar()) {
+        const btnEditar = document.createElement('button');
+        btnEditar.type = 'button';
+        btnEditar.className = 'btn-enlace-admin';
+        btnEditar.textContent = 'Editar';
+        btnEditar.addEventListener('click', function () { abrirModalCatalogo('editar', fila); });
+
+        const btnEliminar = document.createElement('button');
+        btnEliminar.type = 'button';
+        btnEliminar.className = 'btn-peligro';
+        btnEliminar.textContent = 'Eliminar';
+        btnEliminar.addEventListener('click', function () { confirmarEliminarCatalogo(fila[esquema.clave]); });
+
+        tdAcciones.appendChild(btnEditar);
+        tdAcciones.appendChild(btnEliminar);
+      }
+      tr.appendChild(tdAcciones);
+
+      cuerpo.appendChild(tr);
+    });
+  }
+
+  // ---- Modal agregar/editar (formulario armado dinámicamente) ----
+  function configurarModalCatalogo() {
+    document.getElementById('btn-agregar-catalogo').addEventListener('click', function () { abrirModalCatalogo('agregar', null); });
+    document.getElementById('btn-cancelar-catalogo').addEventListener('click', cerrarModalCatalogo);
+    document.getElementById('form-catalogo').addEventListener('submit', guardarFormularioCatalogo);
+  }
+
+  function abrirModalCatalogo(modo, fila) {
+    const esquema = estadoAdmin.esquemas[estadoAdmin.catalogoActual];
+    estadoAdmin.modoModal = modo;
+    estadoAdmin.claveOriginalEdicion = modo === 'editar' ? fila[esquema.clave] : null;
+
+    document.getElementById('modal-catalogo-titulo').textContent =
+      (modo === 'agregar' ? 'Agregar a ' : 'Editar en ') + estadoAdmin.catalogoActual;
+
+    // Columnas como "Obra" en Checadores no son texto libre — son una
+    // referencia a otro catálogo (Obras). Antes de construir el formulario,
+    // se cargan las opciones reales para mostrarlas como <select> y evitar
+    // errores de dedo que romperían el cálculo de vale silenciosamente.
+    const columnasConReferencia = esquema.columnas.filter(function (c) { return esquema.referencias && esquema.referencias[c]; });
+
+    if (columnasConReferencia.length === 0) {
+      _construirFormularioCatalogo(esquema, fila, {});
+      return;
+    }
+
+    const promesas = columnasConReferencia.map(function (columna) {
+      return new Promise(function (resolve) {
+        google.script.run
+          .withSuccessHandler(function (respuesta) { resolve({ columna: columna, datos: respuesta.exito ? respuesta.datos : [] }); })
+          .withFailureHandler(function () { resolve({ columna: columna, datos: [] }); })
+          .listarFilasCatalogo(esquema.referencias[columna], estadoAdmin.token);
+      });
+    });
+
+    Promise.all(promesas).then(function (resultados) {
+      const opcionesReferencia = {};
+      resultados.forEach(function (r) { opcionesReferencia[r.columna] = r.datos.map(function (f) { return f.Nombre; }); });
+      _construirFormularioCatalogo(esquema, fila, opcionesReferencia);
+    });
+  }
+
+  function _construirFormularioCatalogo(esquema, fila, opcionesReferencia) {
+    const form = document.getElementById('form-catalogo');
+    form.innerHTML = '';
+
+    esquema.columnas.forEach(function (columna) {
+      const campo = document.createElement('div');
+      campo.className = 'campo';
+
+      const label = document.createElement('label');
+      label.setAttribute('for', 'campo-' + columna);
+      label.textContent = columna;
+      campo.appendChild(label);
+
+      let input;
+      if (esquema.opciones && esquema.opciones[columna]) {
+        input = document.createElement('select');
+        esquema.opciones[columna].forEach(function (valor) {
+          const opt = document.createElement('option');
+          opt.value = valor;
+          opt.textContent = valor;
+          input.appendChild(opt);
+        });
+      } else if (opcionesReferencia[columna]) {
+        input = document.createElement('select');
+        const vacio = document.createElement('option');
+        vacio.value = '';
+        vacio.textContent = columna === 'Obra' ? '— Varias obras (sin obra fija) —' : '— Selecciona —';
+        input.appendChild(vacio);
+        opcionesReferencia[columna].forEach(function (valor) {
+          const opt = document.createElement('option');
+          opt.value = valor;
+          opt.textContent = valor;
+          input.appendChild(opt);
+        });
+      } else {
+        input = document.createElement('input');
+        input.type = _esColumnaNumerica(columna) ? 'number' : 'text';
+        if (input.type === 'number') input.step = 'any';
+      }
+      input.id = 'campo-' + columna;
+      input.name = columna;
+      if (fila && fila[columna] !== undefined) input.value = fila[columna];
+
+      campo.appendChild(input);
+      form.appendChild(campo);
+    });
+
+    document.getElementById('modal-catalogo').classList.remove('oculto');
+  }
+
+  function _esColumnaNumerica(columna) {
+    return ['Latitud', 'Longitud', 'Rango Inicio', 'Rango Fin', 'Capacidad nominal', 'Capacidad calculada'].indexOf(columna) !== -1;
+  }
+
+  function cerrarModalCatalogo() {
+    document.getElementById('modal-catalogo').classList.add('oculto');
+  }
+
+  function guardarFormularioCatalogo(evento) {
+    evento.preventDefault();
+    const esquema = estadoAdmin.esquemas[estadoAdmin.catalogoActual];
+    const datos = {};
+    esquema.columnas.forEach(function (columna) {
+      datos[columna] = document.getElementById('campo-' + columna).value;
+    });
+
+    const boton = document.getElementById('btn-guardar-catalogo');
+    boton.disabled = true;
+    boton.textContent = 'Guardando…';
+
+    const alTerminar = function (respuesta) {
+      boton.disabled = false;
+      boton.textContent = 'Guardar';
+      if (manejarPosibleSesionExpirada(respuesta)) return;
+      if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+      mostrarToast('Guardado correctamente.', 'exito');
+      cerrarModalCatalogo();
+      cargarFilasCatalogo();
+    };
+    const alFallar = function (err) {
+      boton.disabled = false;
+      boton.textContent = 'Guardar';
+      mostrarToast('No se pudo guardar: ' + err.message, 'error');
+    };
+
+    if (estadoAdmin.modoModal === 'agregar') {
+      google.script.run.withSuccessHandler(alTerminar).withFailureHandler(alFallar)
+        .agregarFilaCatalogo(estadoAdmin.catalogoActual, datos, estadoAdmin.token);
+    } else {
+      google.script.run.withSuccessHandler(alTerminar).withFailureHandler(alFallar)
+        .editarFilaCatalogo(estadoAdmin.catalogoActual, estadoAdmin.claveOriginalEdicion, datos, estadoAdmin.token);
+    }
+  }
+
+  function confirmarEliminarCatalogo(valorClave) {
+    if (!confirm('¿Eliminar "' + valorClave + '" de ' + estadoAdmin.catalogoActual + '? Esta acción no se puede deshacer.')) return;
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+        mostrarToast('Eliminado correctamente.', 'exito');
+        cargarFilasCatalogo();
+      })
+      .withFailureHandler(function (err) { mostrarToast('No se pudo eliminar: ' + err.message, 'error'); })
+      .eliminarFilaCatalogo(estadoAdmin.catalogoActual, valorClave, estadoAdmin.token);
+  }
+
+  // ==========================================================================
+  // REGISTROS (consulta con filtros, eliminar, exportar)
+  // ==========================================================================
+  function configurarVistaRegistros() {
+    document.getElementById('btn-filtrar-registros').addEventListener('click', cargarRegistrosFiltrados);
+    document.getElementById('btn-limpiar-filtros').addEventListener('click', function () {
+      document.getElementById('filtro-checador').value = '';
+      document.getElementById('filtro-tipo').value = '';
+      document.getElementById('filtro-empresa').value = '';
+      document.getElementById('filtro-obra').value = '';
+      document.getElementById('filtro-fecha-desde').value = '';
+      document.getElementById('filtro-fecha-hasta').value = '';
+      cargarRegistrosFiltrados();
+    });
+    document.getElementById('btn-exportar-excel').addEventListener('click', exportarExcel);
+    document.getElementById('btn-exportar-pdf').addEventListener('click', exportarPDF);
+  }
+
+  function cargarOpcionesFiltro() {
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (respuesta.exito) llenarSelectAdmin('filtro-checador', respuesta.datos, 'Nombre');
+      })
+      .listarFilasCatalogo('Checadores', estadoAdmin.token);
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (respuesta.exito) llenarSelectAdmin('filtro-empresa', respuesta.datos, 'Nombre');
+      })
+      .listarFilasCatalogo('Empresas', estadoAdmin.token);
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) return;
+        llenarSelectAdmin('filtro-obra', respuesta.datos, 'Nombre');
+        llenarSelectAdmin('dash-obra', respuesta.datos, 'Nombre');
+      })
+      .listarFilasCatalogo('Obras', estadoAdmin.token);
+
+    cargarRegistrosFiltrados();
+  }
+
+  function llenarSelectAdmin(idSelect, opciones, propiedad) {
+    const select = document.getElementById(idSelect);
+    const valorPrevio = select.value;
+    while (select.options.length > 1) select.remove(1);
+    opciones.forEach(function (o) {
+      const opt = document.createElement('option');
+      opt.value = o[propiedad];
+      opt.textContent = o[propiedad];
+      select.appendChild(opt);
+    });
+    if (valorPrevio) select.value = valorPrevio;
+  }
+
+  function leerFiltrosActuales() {
+    return {
+      checador: document.getElementById('filtro-checador').value,
+      tipo: document.getElementById('filtro-tipo').value,
+      empresa: document.getElementById('filtro-empresa').value,
+      obra: document.getElementById('filtro-obra').value,
+      fechaDesde: document.getElementById('filtro-fecha-desde').value,
+      fechaHasta: document.getElementById('filtro-fecha-hasta').value
+    };
+  }
+
+  function cargarRegistrosFiltrados() {
+    const filtros = leerFiltrosActuales();
+    estadoAdmin.ultimosFiltros = filtros;
+
+    document.getElementById('cuerpo-registros').innerHTML = '<tr><td class="celda-vacia" colspan="11">Cargando…</td></tr>';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+        estadoAdmin.registrosActuales = respuesta.datos;
+        renderizarTablaRegistros();
+      })
+      .withFailureHandler(function (err) { mostrarToast('No se pudieron cargar los registros: ' + err.message, 'error'); })
+      .listarRegistros(filtros, estadoAdmin.token);
+  }
+
+  function renderizarTablaRegistros() {
+    const cuerpo = document.getElementById('cuerpo-registros');
+    document.getElementById('contador-registros').textContent = estadoAdmin.registrosActuales.length + ' registro(s)';
+
+    if (estadoAdmin.registrosActuales.length === 0) {
+      cuerpo.innerHTML = '<tr><td class="celda-vacia" colspan="11">Sin registros con estos filtros.</td></tr>';
+      return;
+    }
+
+    cuerpo.innerHTML = '';
+    estadoAdmin.registrosActuales.forEach(function (r) {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + (r.Fecha || '') + '</td>' +
+        '<td>' + (r.Hora || '') + '</td>' +
+        '<td>' + (r.Checador || '') + '</td>' +
+        '<td><span class="badge-tipo" data-valor="' + r.Tipo + '">' + (r.Tipo || '') + '</span></td>' +
+        '<td>' + (r.Material || '') + '</td>' +
+        '<td>' + (r.Empresa || '') + '</td>' +
+        '<td>' + (r['Camión'] || '') + '</td>' +
+        '<td>' + (r['Volumen real'] || '') + '</td>' +
+        '<td>' + (r['Número de Vale'] || '') + '</td>' +
+        '<td>' + _enlacesImagenes(r) + '</td>' +
+        '<td class="no-imprimir"></td>';
+
+      if (puedeModificar()) {
+        const btnEliminar = document.createElement('button');
+        btnEliminar.type = 'button';
+        btnEliminar.className = 'btn-peligro';
+        btnEliminar.textContent = 'Eliminar';
+        btnEliminar.addEventListener('click', function () {
+          confirmarEliminarRegistro(r['Llave de Sincronización (UUID)']);
+        });
+        tr.lastElementChild.appendChild(btnEliminar);
+      }
+
+      cuerpo.appendChild(tr);
+    });
+  }
+
+  /**
+   * Enlaces directos al vale y a la foto guardados en Drive. Es lo que
+   * permite revisar un viaje desde el panel sin esperar a que traigan el
+   * papel: se abre el vale tal cual se imprimió, en el momento.
+   */
+  function _enlacesImagenes(registro) {
+    const partes = [];
+    const urlVale = registro['Vale (imagen)'];
+    const urlFoto = registro['Foto'];
+
+    if (urlVale) partes.push('<a href="' + urlVale + '" target="_blank" rel="noopener">Vale</a>');
+    if (urlFoto) partes.push('<a href="' + urlFoto + '" target="_blank" rel="noopener">Foto</a>');
+
+    return partes.length > 0 ? partes.join(' · ') : '—';
+  }
+
+  function confirmarEliminarRegistro(uuid) {
+    if (!uuid) { mostrarToast('No se pudo identificar este registro.', 'error'); return; }
+    if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+        mostrarToast('Registro eliminado.', 'exito');
+        cargarRegistrosFiltrados();
+      })
+      .withFailureHandler(function (err) { mostrarToast('No se pudo eliminar: ' + err.message, 'error'); })
+      .eliminarRegistro(uuid, estadoAdmin.token);
+  }
+
+  // ---- Exportar ----
+  function exportarExcel() {
+    const boton = document.getElementById('btn-exportar-excel');
+    boton.disabled = true;
+    boton.textContent = 'Generando…';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        boton.disabled = false;
+        boton.textContent = 'Exportar a Excel';
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+        // Antes esto abría una hoja nueva de Drive, y quien no fuera su
+        // dueño se topaba con "necesitas permiso". Ahora el archivo llega
+        // dentro de la respuesta y se guarda directo en Descargas.
+        descargarBase64ComoArchivo(respuesta.base64, respuesta.nombreArchivo,
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        mostrarToast(respuesta.filas + ' registro(s) descargados en Excel.', 'exito');
+      })
+      .withFailureHandler(function (err) {
+        boton.disabled = false;
+        boton.textContent = 'Exportar a Excel';
+        mostrarToast('No se pudo exportar: ' + err.message, 'error');
+      })
+      .exportarRegistrosExcel(estadoAdmin.ultimosFiltros, estadoAdmin.token);
+  }
+
+  function exportarPDF() {
+    const boton = document.getElementById('btn-exportar-pdf');
+    boton.disabled = true;
+    boton.textContent = 'Generando…';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        boton.disabled = false;
+        boton.textContent = 'Exportar a PDF';
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { mostrarToast(respuesta.error, 'error'); return; }
+        descargarBase64ComoArchivo(respuesta.base64, respuesta.nombreArchivo, 'application/pdf');
+        mostrarToast(respuesta.filas + ' registro(s) exportados a PDF.', 'exito');
+      })
+      .withFailureHandler(function (err) {
+        boton.disabled = false;
+        boton.textContent = 'Exportar a PDF';
+        mostrarToast('No se pudo exportar: ' + err.message, 'error');
+      })
+      .exportarRegistrosPDF(estadoAdmin.ultimosFiltros, estadoAdmin.token);
+  }
+
+  function descargarBase64ComoArchivo(base64, nombreArchivo, tipoMime) {
+    const textoBinario = atob(base64);
+    const arreglo = new Uint8Array(textoBinario.length);
+    for (let i = 0; i < textoBinario.length; i++) arreglo[i] = textoBinario.charCodeAt(i);
+
+    const blob = new Blob([arreglo], { type: tipoMime });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombreArchivo;
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    URL.revokeObjectURL(url);
+  }
+
+  // ==========================================================================
+  // DASHBOARD (Fase 9)
+  // ==========================================================================
+  function configurarVistaDashboard() {
+    document.getElementById('btn-actualizar-dashboard').addEventListener('click', function () {
+      estadoAdmin.dashboardCargado = false;
+      cargarDashboard();
+    });
+
+    // Google Charts se carga en paralelo al resto de la página (ver el
+    // <script src="...loader.js"> en AdminIndex.html). No bloqueamos nada
+    // más esperándolo — solo se necesita cuando de verdad se dibuja algo.
+    // La comprobación no sobra: ese script viene de un servidor de Google, y
+    // si no llega (sin internet, red filtrada, Google caído) "google.charts"
+    // no existe. Sin el if, la línea de abajo reventaba y se llevaba por
+    // delante el resto del panel: ni catálogos ni registros, solo por una
+    // gráfica. Así lo único que falta es el dashboard.
+    if (window.google && window.google.charts) {
+      google.charts.load('current', { packages: ['corechart'] });
+      google.charts.setOnLoadCallback(function () { estadoAdmin.googleChartsListo = true; });
+    } else {
+      estadoAdmin.googleChartsListo = false;
+      const aviso = document.getElementById('dash-estado');
+      if (aviso) aviso.textContent = 'Las gráficas necesitan internet; el resto del panel funciona igual.';
+    }
+  }
+
+  function cargarDashboard() {
+    const estadoTexto = document.getElementById('dash-estado');
+    estadoTexto.textContent = 'Cargando…';
+
+    const filtros = {
+      obra: document.getElementById('dash-obra').value,
+      fechaDesde: document.getElementById('dash-fecha-desde').value,
+      fechaHasta: document.getElementById('dash-fecha-hasta').value
+    };
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (manejarPosibleSesionExpirada(respuesta)) return;
+        if (!respuesta.exito) { estadoTexto.textContent = ''; mostrarToast(respuesta.error, 'error'); return; }
+
+        estadoAdmin.dashboardCargado = true;
+        estadoTexto.textContent = respuesta.kpis.totalViajes + ' viaje(s) en el rango seleccionado.';
+
+        dibujarKPIs(respuesta.kpis);
+        _cuandoGoogleChartsListo(function () { dibujarGraficasDashboard(respuesta); });
+      })
+      .withFailureHandler(function (err) {
+        estadoTexto.textContent = '';
+        mostrarToast('No se pudo cargar el dashboard: ' + err.message, 'error');
+      })
+      .obtenerDatosDashboard(filtros, estadoAdmin.token);
+  }
+
+  // Google Charts puede tardar en cargar la primera vez; si los datos ya
+  // llegaron antes de que esté listo, esperamos en vez de fallar.
+  function _cuandoGoogleChartsListo(callback) {
+    if (estadoAdmin.googleChartsListo) { callback(); return; }
+    setTimeout(function () { _cuandoGoogleChartsListo(callback); }, 200);
+  }
+
+  function dibujarKPIs(kpis) {
+    const contenedor = document.getElementById('dash-kpis');
+    const tarjetas = [
+      { valor: kpis.totalViajes, etiqueta: 'Viajes totales' },
+      { valor: kpis.volumenTotal + ' m³', etiqueta: 'Volumen total' },
+      { valor: kpis.camionesDistintos, etiqueta: 'Camiones distintos' },
+      { valor: kpis.obrasInvolucradas, etiqueta: 'Obras involucradas' }
+    ];
+    contenedor.innerHTML = tarjetas.map(function (t) {
+      return '<div class="tarjeta-kpi"><div class="valor-kpi">' + t.valor + '</div><div class="etiqueta-kpi">' + t.etiqueta + '</div></div>';
+    }).join('');
+  }
+
+  function dibujarGraficasDashboard(datos) {
+    dibujarColumnasApiladas('grafica-viajes-dia', ['Fecha', 'Entradas', 'Salidas'], datos.viajesPorDia);
+    dibujarPastel('grafica-entradas-salidas', datos.entradasSalidas);
+    dibujarBarras('grafica-viajes-empresa', datos.viajesPorEmpresa, 'Viajes');
+    dibujarBarras('grafica-material', datos.volumenPorMaterial, 'm³');
+    dibujarBarras('grafica-volumen-obra', datos.volumenPorObra, 'm³');
+    dibujarBarras('grafica-volumen-banco', datos.volumenPorBanco, 'm³');
+    dibujarBarras('grafica-capacidad', datos.capacidadUtilizada, '%');
+    dibujarBarras('grafica-checador', datos.viajesPorChecador, 'Viajes');
+  }
+
+  function _colorTema() {
+    // Los mismos tonos café/gris de la identidad del sistema, para que las
+    // gráficas de Google Charts no se sientan ajenas al resto de la app.
+    return ['#6F4E37', '#A9805F', '#B4802A', '#5B7553', '#7A7368'];
+  }
+
+  function dibujarColumnasApiladas(idContenedor, encabezados, filas) {
+    const contenedor = document.getElementById(idContenedor);
+    if (!filas || filas.length === 0) { contenedor.innerHTML = '<p class="subt">Sin datos en este rango.</p>'; return; }
+
+    const datos = google.visualization.arrayToDataTable([encabezados].concat(filas));
+    const grafica = new google.visualization.ColumnChart(contenedor);
+    grafica.draw(datos, {
+      isStacked: true,
+      colors: _colorTema(),
+      legend: { position: 'top' },
+      chartArea: { left: 50, top: 30, right: 10, bottom: 50 },
+      hAxis: { textStyle: { fontSize: 10 } }
+    });
+  }
+
+  function dibujarPastel(idContenedor, filas) {
+    const contenedor = document.getElementById(idContenedor);
+    const total = filas.reduce(function (s, f) { return s + f[1]; }, 0);
+    if (!filas || total === 0) { contenedor.innerHTML = '<p class="subt">Sin datos en este rango.</p>'; return; }
+
+    const datos = google.visualization.arrayToDataTable([['Tipo', 'Cantidad']].concat(filas));
+    const grafica = new google.visualization.PieChart(contenedor);
+    grafica.draw(datos, {
+      colors: _colorTema(),
+      legend: { position: 'bottom' },
+      chartArea: { top: 10, bottom: 40 },
+      pieHole: 0.4
+    });
+  }
+
+  function dibujarBarras(idContenedor, filas, etiquetaValor) {
+    const contenedor = document.getElementById(idContenedor);
+    if (!filas || filas.length === 0) { contenedor.innerHTML = '<p class="subt">Sin datos en este rango.</p>'; return; }
+
+    // Se ordena de mayor a menor y se limita a 12 para que la gráfica
+    // siga siendo legible aunque el catálogo tenga muchos elementos.
+    const filasOrdenadas = filas.slice().sort(function (a, b) { return b[1] - a[1]; }).slice(0, 12);
+
+    const datos = google.visualization.arrayToDataTable([['Categoría', etiquetaValor]].concat(filasOrdenadas));
+    const grafica = new google.visualization.BarChart(contenedor);
+    grafica.draw(datos, {
+      colors: _colorTema(),
+      legend: { position: 'none' },
+      chartArea: { left: 110, top: 10, right: 20, bottom: 20 }
+    });
+  }
+
+  // ==========================================================================
+  // MENSAJES (toasts) — mismo patrón visual que la app de captura
+  // ==========================================================================
+  function mostrarToast(mensaje, tipo) {
+    const contenedor = document.getElementById('contenedor-toast');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.dataset.tipo = tipo || 'info';
+    toast.textContent = mensaje;
+    contenedor.appendChild(toast);
+    setTimeout(function () { toast.remove(); }, 4000);
+  }
+</script>
+
+</body>
+</html>

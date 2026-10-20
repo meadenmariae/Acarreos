@@ -1,0 +1,3960 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <script src="config.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Registro de Viajes</title>
+
+  <!-- Identidad al guardarla en la pantalla de inicio: icono propio, nombre
+       corto y apertura a pantalla completa, sin barra de navegador. -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icono-192.png">
+  <link rel="apple-touch-icon" href="icono-180.png">
+  <meta name="theme-color" content="#6F4E37">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Acarreos">
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <!-- Sin Google Fonts a propósito: era la única llamada de red que la app
+       hacía sin necesitarla. Se usa la tipografía del sistema, que ya está
+       en el teléfono, así que la pantalla aparece completa desde el primer
+       instante aunque la señal esté mala. -->
+  <style>
+  /* ==========================================================================
+     FASE 3 — VARIABLES DE DISEÑO (light y dark)
+     Paleta: gris claro, café, blanco — según lo solicitado.
+     El "ticket perforado" del número de vale es el elemento distintivo:
+     recuerda al vale físico de papel que este sistema reemplaza.
+     ========================================================================== */
+  :root {
+    --color-bg: #FAF9F6;
+    --color-surface: #FFFFFF;
+    --color-surface-alt: #F1EEE8;
+    --color-border: #E2DED5;
+    --color-text: #2B2622;
+    --color-text-muted: #7A7368;
+    --color-cafe: #6F4E37;
+    --color-cafe-oscuro: #4A3222;
+    --color-cafe-claro: #A9805F;
+    --color-exito: #5B7553;
+    --color-alerta: #B4802A;
+    --color-error: #A23E36;
+
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+
+    --sombra-sm: 0 1px 2px rgba(43, 38, 34, 0.06), 0 1px 1px rgba(43, 38, 34, 0.04);
+    --sombra-md: 0 6px 16px rgba(43, 38, 34, 0.10);
+
+    /* Tipografía del sistema: ya está instalada en el teléfono, así que
+       no hay que descargar nada y la app se dibuja completa aunque no
+       haya señal. En Android esto resuelve a Roboto. */
+    --fuente: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+    --transicion-rapida: 150ms ease;
+    --transicion-base: 220ms cubic-bezier(.4, 0, .2, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #1B1714;
+      --color-surface: #241F1A;
+      --color-surface-alt: #2C2620;
+      --color-border: #3A332B;
+      --color-text: #EDEAE2;
+      --color-text-muted: #A69C8D;
+      --color-cafe: #C89B6E;
+      --color-cafe-oscuro: #E4BE93;
+      --color-cafe-claro: #8B6A4A;
+      --color-exito: #8FAE7F;
+      --color-alerta: #E0A94C;
+      --color-error: #E08579;
+      --sombra-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --sombra-md: 0 6px 16px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  /* ==========================================================================
+     RESET Y BASE
+     ========================================================================== */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--fuente);
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  h1, h2, h3 { margin: 0; }
+  button { font-family: inherit; cursor: pointer; }
+  input, select, textarea { font-family: inherit; }
+  .oculto { display: none !important; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-cafe);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+
+  /* ==========================================================================
+     LAYOUT GENERAL
+     ========================================================================== */
+  .app {
+    max-width: 560px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .encabezado {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    padding-top: calc(14px + env(safe-area-inset-top));
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .encabezado-marca { display: flex; flex-direction: column; line-height: 1.2; }
+  .encabezado-titulo { font-size: 1.05rem; font-weight: 800; }
+  .encabezado-subtitulo { font-size: 0.75rem; color: var(--color-text-muted); }
+  .encabezado-acciones { display: flex; align-items: center; gap: 8px; }
+
+  .contenido {
+    flex: 1;
+    padding: 16px;
+    padding-bottom: 8px;
+  }
+
+  /* ==========================================================================
+     INDICADOR DE CONEXIÓN
+     ========================================================================== */
+  .estado-conexion {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: var(--color-surface-alt);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+  .estado-conexion .punto {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+  .estado-conexion[data-estado="conectado"] .punto { background: var(--color-exito); }
+  .estado-conexion[data-estado="conectado"] { color: var(--color-exito); }
+  .estado-conexion[data-estado="sin-conexion"] .punto { background: var(--color-error); }
+  .estado-conexion[data-estado="sin-conexion"] { color: var(--color-error); }
+  .estado-conexion[data-estado="sincronizando"] .punto {
+    background: var(--color-alerta);
+    animation: pulso 1.1s ease-in-out infinite;
+  }
+  .estado-conexion[data-estado="sincronizando"] { color: var(--color-alerta); }
+
+  @keyframes pulso {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .btn-icono {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: border-color var(--transicion-rapida), transform var(--transicion-rapida);
+  }
+  .btn-icono:active { transform: scale(0.93); }
+  .btn-icono svg { width: 18px; height: 18px; }
+
+  .badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--color-error);
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ==========================================================================
+     TARJETAS / SECCIONES
+     ========================================================================== */
+  .tarjeta {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--sombra-sm);
+    padding: 18px;
+    margin-bottom: 14px;
+    animation: aparecer var(--transicion-base) ease;
+  }
+  @keyframes aparecer {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .tarjeta-titulo {
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
+    margin-bottom: 14px;
+  }
+
+  /* ==========================================================================
+     CAMPOS DE FORMULARIO
+     ========================================================================== */
+  .campo { margin-bottom: 16px; }
+  .campo:last-child { margin-bottom: 0; }
+
+  .campo label,
+  .etiqueta-estatica {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  .fila-doble {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 1rem;
+    transition: border-color var(--transicion-rapida);
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'><path d='M5 7.5L10 12.5L15 7.5' stroke='%237A7368' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 38px;
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { border-color: var(--color-cafe); }
+  input::placeholder, textarea::placeholder { color: var(--color-text-muted); opacity: 0.7; }
+
+  .valor-estatico {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ayuda {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+  }
+
+  .ayuda-ubicacion {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
+  }
+  .ayuda-ubicacion .ayuda { margin-top: 0; flex: 1; }
+  .btn-enlace {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 4px 0;
+    color: var(--color-cafe);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* Ticket del número de vale — el elemento distintivo de la interfaz */
+  .vale-ticket {
+    position: relative;
+    background: var(--color-surface-alt);
+    border: 1.5px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 14px 20px;
+    overflow: hidden;
+    text-align: center;
+  }
+  .vale-ticket::before,
+  .vale-ticket::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    background: var(--color-bg);
+    border-radius: 50%;
+    transform: translateY(-50%);
+  }
+  .vale-ticket::before { left: -8px; }
+  .vale-ticket::after { right: -8px; }
+  .vale-numero {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-cafe-oscuro);
+  }
+
+  /* ==========================================================================
+     SEGMENTADO ENTRADA / SALIDA
+     ========================================================================== */
+  .segmentado {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .segmentado-boton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 64px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    font-weight: 800;
+    transition: var(--transicion-base);
+  }
+  .segmentado-boton svg { width: 20px; height: 20px; }
+  .segmentado-boton[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+    box-shadow: var(--sombra-md);
+  }
+  .segmentado-chico .segmentado-boton {
+    min-height: 46px;
+    font-size: 0.9rem;
+  }
+
+  /* ==========================================================================
+     BLOQUE CAMIÓN (QR / buscador / info)
+     ========================================================================== */
+  .btn-secundario {
+    width: 100%;
+    min-height: 48px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface-alt);
+    color: var(--color-text);
+    font-weight: 700;
+    transition: border-color var(--transicion-rapida);
+  }
+  .btn-secundario:active { border-color: var(--color-cafe); }
+
+  .lista-resultados {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 4px;
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+  }
+  .lista-resultados li {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.92rem;
+  }
+  .lista-resultados li:active { background: var(--color-surface-alt); }
+
+  .tarjeta-info {
+    margin-top: 12px;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-alt);
+  }
+  .info-fila {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: 0.9rem;
+  }
+  .info-fila:last-of-type { border-bottom: none; }
+  .info-fila span { color: var(--color-text-muted); }
+
+  /* ==========================================================================
+     FOTOGRAFÍA
+     ========================================================================== */
+  .foto-vista-previa {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    margin-top: 10px;
+    border: 1px solid var(--color-border);
+  }
+
+  /* ==========================================================================
+     PIE FIJO / BOTÓN GUARDAR
+     ========================================================================== */
+  .pie-fijo {
+    position: sticky;
+    bottom: 0;
+    padding: 14px 16px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--color-bg) 65%, transparent);
+  }
+  .btn-guardar {
+    width: 100%;
+    min-height: 56px;
+    border-radius: var(--radius-md);
+    border: none;
+    background: var(--color-cafe-oscuro);
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 800;
+    box-shadow: var(--sombra-md);
+    transition: var(--transicion-base);
+  }
+  .btn-guardar:active { transform: scale(0.98); }
+  .btn-guardar:disabled { opacity: 0.5; box-shadow: none; }
+
+  /* ==========================================================================
+     MODAL DE CÁMARA (foto / QR)
+     ========================================================================== */
+  .contenedor-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20, 17, 14, 0.75);
+    padding: 20px;
+  }
+  /* Nombradas así por la cámara en vivo original; hoy las usa el modal
+     de vista previa del ticket. */
+  .modal-camara-caja {
+    width: 100%;
+    max-width: 440px;
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    box-shadow: var(--sombra-md);
+  }
+  /* Casilla de ciclo completo: área táctil amplia, para tocarla de prisa. */
+  .casilla {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    margin-top: 12px;
+    padding: 0 14px;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .casilla input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    accent-color: var(--color-cafe);
+    margin: 0;
+  }
+  .casilla:has(input:checked) {
+    border-color: var(--color-cafe);
+    background: var(--color-surface-alt);
+  }
+  .opcional {
+    font-weight: 500;
+    color: var(--color-text-muted);
+    font-size: 0.85em;
+  }
+
+  /* El aviso del vale de cierre cambia de color según el resultado de la
+     verificación: es el dato que liga los dos movimientos del ciclo. */
+  /* Nota que explica para qué sirve el campo: se distingue del texto de
+     estado (GPS, validaciones) para que no se confundan entre sí. */
+  .nota-fija {
+    display: block;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .ayuda[data-estado="ok"] { color: var(--color-exito); font-weight: 700; }
+  .ayuda[data-estado="error"] { color: var(--color-error); font-weight: 700; }
+  .ayuda[data-estado="aviso"] { color: var(--color-cafe-oscuro); font-weight: 700; }
+
+  .grid-camiones {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .btn-camion {
+    min-height: 56px;
+    padding: 8px 6px;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-weight: 800;
+    font-size: 0.95rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+  .btn-camion .placa-mini {
+    display: block;
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+  }
+  .btn-camion[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+  }
+  .btn-camion[aria-pressed="true"] .placa-mini { color: rgba(255,255,255,0.85); }
+
+  .oculto-total {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    left: -9999px;
+  }
+  .acciones-secundarias-ticket {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  /* Oculta de verdad, sin depender de la especificidad de cada regla.
+     No se reutiliza .oculto-total para esto: aquella mueve el elemento fuera
+     de la pantalla con position/left, y la pantalla del PIN define su propio
+     position:fixed e inset:0 — se pisaban entre sí y la pantalla seguía
+     encima de la app. display:none no tiene ese problema. */
+  .pantalla-oculta { display: none !important; }
+
+  /* ==========================================================================
+     PANTALLA DE ENTRADA CON PIN (app de captura)
+     ========================================================================== */
+  .pantalla-pin {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: var(--color-bg);
+    z-index: 50;
+  }
+
+  .tarjeta-pin {
+    width: 100%;
+    max-width: 340px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 28px 22px;
+    box-shadow: var(--sombra-md);
+    text-align: center;
+  }
+
+  .marca-pin { margin-bottom: 22px; }
+
+  .marca-pin-titulo {
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--color-text);
+  }
+
+  .marca-pin-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+  }
+
+  .tarjeta-pin label {
+    display: block;
+    text-align: left;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+  }
+
+  /* Dígitos grandes y separados: esto se teclea a la intemperie, a veces con
+     guantes, y hay que poder ver cuántos se llevan escritos. */
+  .campo-pin {
+    width: 100%;
+    min-height: 58px;
+    text-align: center;
+    font-size: 1.6rem;
+    letter-spacing: 0.35em;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .error-pin {
+    min-height: 20px;
+    margin-top: 10px;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--color-error);
+  }
+
+  .tarjeta-pin .ayuda {
+    display: block;
+    margin-top: 4px;
+    text-align: center;
+  }
+
+  /* Nombre del checador ya identificado: se ve, no se edita. */
+  .fila-checador {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .fila-checador input[readonly] {
+    flex: 1;
+    background: var(--color-surface-alt);
+    font-weight: 700;
+    cursor: default;
+  }
+
+  .fila-checador .btn-enlace { flex: 0 0 auto; }
+  .ticket-imagen {
+    display: block;
+    width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    image-rendering: pixelated; /* nítido a 1:1 en vez de borroso al escalar */
+  }
+  .modal-camara-acciones {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  /* ==========================================================================
+     TOASTS (mensajes de validación / estado)
+     ========================================================================== */
+  .contenedor-toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 528px;
+    margin: 0 auto;
+    pointer-events: none;
+  }
+  .toast {
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    border-left: 4px solid var(--color-text-muted);
+    box-shadow: var(--sombra-md);
+    font-size: 0.88rem;
+    animation: deslizar var(--transicion-base) ease;
+  }
+  .toast[data-tipo="exito"] { border-left-color: var(--color-exito); }
+  .toast[data-tipo="error"] { border-left-color: var(--color-error); }
+  .toast[data-tipo="info"] { border-left-color: var(--color-alerta); }
+  @keyframes deslizar {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (min-width: 400px) {
+    .contenedor-modal { padding: 24px; }
+  }
+</style>
+
+  <script>
+  // ============================================================================
+  // BASE DE DATOS LOCAL (IndexedDB) — Fase 7
+  // ============================================================================
+  // Nota de arquitectura importante: como todo el proyecto vive dentro de
+  // Apps Script sin hosting externo, no hay Service Worker — así que esta
+  // base de datos SOLO puede leerse/escribirse mientras la pestaña sigue
+  // cargada en el navegador (IndexedDB en sí no necesita conexión, pero la
+  // primera carga de la página sí la necesita). Los datos persisten aunque
+  // se cierre el navegador; lo que no persiste es la posibilidad de volver
+  // a ABRIR la app sin internet si la pestaña ya se cerró por completo.
+  //
+  // Almacenes (object stores):
+  //   - catalogos          → un solo registro con los 8 catálogos + config.
+  //   - valesConocidos     → por checador, el último rango/usados que se
+  //                          supo del backend (para calcular vale offline).
+  //   - registrosPendientes → cola de viajes capturados, listos para
+  //                          sincronizarse (o que fallaron al sincronizar).
+  //   - sesion             → el token del checador que entró en este
+  //                          celular. Se guarda el token, NUNCA el PIN.
+  // ============================================================================
+
+  const NOMBRE_BD_LOCAL = 'AcarreoMaterialesDB';
+  // Subió a 2 al agregarse el almacén "sesion". Al abrir una base vieja,
+  // onupgradeneeded crea lo que falte sin tocar lo que ya había: los
+  // registros pendientes y los catálogos guardados se conservan.
+  const VERSION_BD_LOCAL = 2;
+
+  function abrirBaseDatosLocal() {
+    return new Promise(function (resolve, reject) {
+      const solicitud = indexedDB.open(NOMBRE_BD_LOCAL, VERSION_BD_LOCAL);
+
+      solicitud.onupgradeneeded = function (evento) {
+        const db = evento.target.result;
+        if (!db.objectStoreNames.contains('catalogos')) {
+          db.createObjectStore('catalogos', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('valesConocidos')) {
+          db.createObjectStore('valesConocidos', { keyPath: 'checador' });
+        }
+        if (!db.objectStoreNames.contains('registrosPendientes')) {
+          db.createObjectStore('registrosPendientes', { keyPath: 'uuid' });
+        }
+        if (!db.objectStoreNames.contains('sesion')) {
+          db.createObjectStore('sesion', { keyPath: 'id' });
+        }
+      };
+
+      solicitud.onsuccess = function (evento) { resolve(evento.target.result); };
+      solicitud.onerror = function (evento) { reject(evento.target.error); };
+    });
+  }
+
+  function guardarEnAlmacen(nombreAlmacen, valor) {
+    return abrirBaseDatosLocal().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(nombreAlmacen, 'readwrite');
+        tx.objectStore(nombreAlmacen).put(valor);
+        tx.oncomplete = function () { resolve(valor); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function obtenerDeAlmacen(nombreAlmacen, clave) {
+    return abrirBaseDatosLocal().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(nombreAlmacen, 'readonly');
+        const solicitud = tx.objectStore(nombreAlmacen).get(clave);
+        solicitud.onsuccess = function () { resolve(solicitud.result || null); };
+        solicitud.onerror = function () { reject(solicitud.error); };
+      });
+    });
+  }
+
+  function obtenerTodoDeAlmacen(nombreAlmacen) {
+    return abrirBaseDatosLocal().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(nombreAlmacen, 'readonly');
+        const solicitud = tx.objectStore(nombreAlmacen).getAll();
+        solicitud.onsuccess = function () { resolve(solicitud.result || []); };
+        solicitud.onerror = function () { reject(solicitud.error); };
+      });
+    });
+  }
+
+  function eliminarDeAlmacen(nombreAlmacen, clave) {
+    return abrirBaseDatosLocal().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(nombreAlmacen, 'readwrite');
+        tx.objectStore(nombreAlmacen).delete(clave);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  function contarEnAlmacen(nombreAlmacen) {
+    return abrirBaseDatosLocal().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction(nombreAlmacen, 'readonly');
+        const solicitud = tx.objectStore(nombreAlmacen).count();
+        solicitud.onsuccess = function () { resolve(solicitud.result); };
+        solicitud.onerror = function () { reject(solicitud.error); };
+      });
+    });
+  }
+</script>
+
+  <script>
+  // ============================================================================
+  // CLIENTE DE API — reemplazo de google.script.run
+  // ============================================================================
+  // Cuando la app vive dentro de Apps Script, el objeto google.script.run ya
+  // existe y permite llamar funciones del servidor. Al mover la app a un
+  // hosting propio (necesario para poder imprimir por Bluetooth), ese objeto
+  // desaparece.
+  //
+  // En vez de reescribir las cientos de llamadas repartidas por el proyecto,
+  // aquí se construye un objeto con la MISMA forma que google.script.run,
+  // pero que por dentro manda una petición al backend. Así todo el código
+  // que ya funcionaba sigue igual, y el mismo archivo sirve en los dos
+  // escenarios: si google.script.run ya existe, esto no hace nada.
+  //
+  // CONFIGURACIÓN: la URL de la Web App de Apps Script (la que termina en
+  // /exec) se pone en el archivo config.js, al lado de las páginas. Así se
+  // puede cambiar sin volver a generar nada: se edita esa línea y listo.
+  // El valor de abajo solo se usa si config.js no existe.
+  // ============================================================================
+
+  const URL_BACKEND = (typeof window !== 'undefined' && window.URL_BACKEND_ACARREO)
+    ? window.URL_BACKEND_ACARREO
+    : 'PON_AQUI_LA_URL_DE_TU_WEB_APP_QUE_TERMINA_EN_EXEC';
+
+  (function () {
+    // Si ya existe (la app corriendo dentro de Apps Script), no se toca nada.
+    if (window.google && window.google.script && window.google.script.run) return;
+
+    /**
+     * Manda una operación al backend.
+     *
+     * El tipo de contenido es "text/plain" a propósito: con
+     * "application/json" el navegador hace una consulta previa (preflight)
+     * que Apps Script no responde, y la llamada falla. El contenido va en
+     * JSON igual; solo cambia la etiqueta con la que viaja.
+     */
+    function llamarBackend(operacion, argumentos) {
+      return fetch(URL_BACKEND, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ operacion: operacion, argumentos: argumentos })
+      }).then(function (respuesta) {
+        if (!respuesta.ok) throw new Error('El servidor respondió ' + respuesta.status);
+        return respuesta.json();
+      });
+    }
+
+    /**
+     * Imita el encadenamiento de google.script.run:
+     *   google.script.run.withSuccessHandler(f).withFailureHandler(g).operacion(args)
+     *
+     * Cada llamada a withSuccessHandler/withFailureHandler devuelve un objeto
+     * nuevo, igual que el original, para que se puedan encadenar en
+     * cualquier orden sin pisarse entre sí.
+     */
+    function construirCorredor(alExito, alFallar) {
+      const corredor = {
+        withSuccessHandler: function (f) { return construirCorredor(f, alFallar); },
+        withFailureHandler: function (f) { return construirCorredor(alExito, f); },
+        withUserObject: function () { return corredor; } // existe por compatibilidad
+      };
+
+      // Cada operación permitida se expone como método, igual que el original.
+      OPERACIONES_DISPONIBLES.forEach(function (operacion) {
+        corredor[operacion] = function () {
+          const argumentos = Array.prototype.slice.call(arguments);
+
+          llamarBackend(operacion, argumentos)
+            .then(function (resultado) { if (alExito) alExito(resultado); })
+            .catch(function (err) {
+              if (alFallar) {
+                alFallar(err);
+              } else {
+                // Sin manejador de error, al menos queda registro en la
+                // consola en vez de desaparecer en silencio.
+                console.error('Error llamando a ' + operacion + ':', err);
+              }
+            });
+        };
+      });
+
+      // Red de seguridad: si el código llama a una operación que no está en
+      // la lista de arriba, el objeto no tendría ese método y el navegador
+      // soltaría un "no es una función" sin decir cuál ni por qué. Esto ya
+      // estuvo a punto de romper el login: la operación existía en Code.gs
+      // pero faltaba aquí. Con esta trampa el error dice exactamente qué
+      // agregar y dónde.
+      if (typeof Proxy === 'function') {
+        return new Proxy(corredor, {
+          get: function (objetivo, propiedad) {
+            if (propiedad in objetivo) return objetivo[propiedad];
+            if (typeof propiedad !== 'string') return undefined;
+            throw new Error(
+              'La operación "' + propiedad + '" no está dada de alta en ApiCliente.html. ' +
+              'Agrégala a OPERACIONES_DISPONIBLES (y revisa que exista en OPERACIONES_API de Code.gs).'
+            );
+          }
+        });
+      }
+
+      return corredor;
+    }
+
+    // Debe coincidir con OPERACIONES_API de Code.gs.
+    const OPERACIONES_DISPONIBLES = [
+      'obtenerCatalogos', 'obtenerInfoValeObra', 'guardarRegistro',
+      'guardarRegistrosEnLote', 'verificarValeCiclo',
+      'iniciarSesionChecador', 'renovarSesionChecador',
+      'iniciarSesionAdmin', 'cerrarSesionAdmin', 'obtenerEsquemasCatalogos',
+      'listarFilasCatalogo', 'agregarFilaCatalogo', 'editarFilaCatalogo',
+      'eliminarFilaCatalogo', 'listarRegistros', 'eliminarRegistro',
+      'exportarRegistrosExcel', 'exportarRegistrosPDF', 'obtenerDatosDashboard',
+      'obtenerDatosEntradaObra', 'iniciarSesionEncargado',
+      'cerrarSesionEncargado', 'obtenerMovimientosEncargado'
+    ];
+
+    window.google = window.google || {};
+    window.google.script = window.google.script || {};
+    window.google.script.run = construirCorredor(null, null);
+  })();
+</script>
+
+  <script>
+  // ============================================================================
+  // GENERADOR DE TICKET (adelanto de Fase 10)
+  // ============================================================================
+  // La Zebra iMZ220 usa Bluetooth Classic (SPP), que los navegadores NO pueden
+  // hablar directamente (Web Bluetooth solo soporta BLE) — confirmado al
+  // probar la impresora. Por eso el "ticket" que genera esta app es una
+  // IMAGEN PNG que el checador comparte/imprime usando la app oficial de
+  // Zebra (o cualquier app de impresión compatible), no una impresión
+  // automática silenciosa.
+  //
+  // Dimensiones: el rollo imprime a 48mm de ancho útil, a 203dpi → eso son
+  // ~384px. Se genera el canvas exactamente a ese ancho (1:1 con los puntos
+  // reales de la impresora, sin escalado que difumine el texto), y la altura
+  // se recorta al contenido real que se dibujó — así el ticket nunca sale
+  // más largo de lo necesario.
+  // ============================================================================
+
+  const ANCHO_TICKET_PX = 384; // 48mm @ 203dpi
+  const MARGEN_TICKET_PX = 12;
+
+  const CONFIG_TICKET = {
+    nombreEmpresa: 'MPC',
+    // Logo procesado a blanco/negro puro (sin grises: los térmicos directos
+    // no los manejan bien) y recortado a su contenido real. Para cambiarlo,
+    // reemplaza este base64 por el de tu nuevo logo ya procesado igual.
+    logoBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAACOCAYAAACL3jUkAAAYGUlEQVR42u2df7AkVXXHP9Mz7+0vFhAkhSAFhiUb5IeEAAIb4A90WYQYQEzAovjhTyhLFAwBFEkgBlIaKFHBQpAgcYMSpEpQK/zSJWaBBKiECERk+bEgahR1fz12eW9mOn/0Ofbdtue9vj3dM90z51s1NY9luvv2vd/7veece+69DUYDDfluAR2gm/KbRcAZQCi/nwdcKd+hc4/ZoL97DbhYvvXfvgpMpVwzId9t5x6G0YHLPYCZCnEvAJqjxL1GzcvfFHFKNsTBIlyfAHaXv7cHlpZYlqeBdVKmTwM/AV4Gfp74XUvK27G+XnvuNRwxUOwM7Aq8EbhkCNxbC1whfz+S0t+DOnOvUcPyBs7IohW/WEary4DdgD/tcX07RTzyIsu91gL3yah7CbBJRkYd/RRd6/+1QFqbzQO2kUFqAnibDJLD5h7AXcBLwF8L7zY6Yqt9qGtWf3lkSQrsYcBNwHpgg1R8KA3ake+2899hiZ9O4lntxP+fAp4EPggsS3EbA2viSnNvIvFvy6Qtn5S2DWfh3yC5l8a/DdJHbpI+k2YEGAoiSivF3TsPeAx4NdFwM/IJK/LpANMpZXoVeBQ4X1yIpKthqI7bl3T3zpe2S+Pe9ADEyecz04N7j0kfOjjFUjPxKoAsAbAcuDOlUXQk6VaIKGmfrnymE//+LHAjsCLx7k3qH2Osa5ikmeDfCmmjZxNtN+20a9W5F6ZY/aH0qeUJobJBM6dVtQQ4G7inh7lddaLMRqCk2d4F7gdONHO9MmGHE6VNuin8qzP30tzGe6SvLTFrK5/5fQTwYg9rapQ+HTHb3Q7wIHBkyshvKM+qcnGktIHbyWcq5u4V9Un2qRel71mYYg4TXEe4Y4hmN1yzexSJ0ku83He9S+ojcOrJhKt47jV6cK8zZtyb7sE9jHux2ak4ScxvV/m7Y0KWudzF+4lSN1zXxdC/+6dYnMK9zhjzL8m9k3r02bFy/9Sq2oVo5qVXhQ26saZTPsMirivaa6SedjHRKkyslHtrjHuzci9McK85Tm6i+6KXEyVXhgOIEaTlqiQ/Wdw19+Per1ty2fXvtcC+40icggfKfR3uhTXnXtlln3G4d/kwY1uNAT9rkijj9k+A9xOtr0IqpciXD51vzYafyHDdRuBrUtbQ+T4t4ZL1emZbRu+ghPpVQdS1YTcDH3CIY0t95hYrraMbgDOJ154WPRsbDph7EK9h1FhT0X3b7aNfJUrz+HeiTP9pBpQt3xigWGlDLge+LY3YLiGY1+7hZ/8I+I087wWi9VYNh1wNoozg51OufROwrfM7ve4TwB7SmIf1KEvRfn/XcWuuBz4n74ZTLsPW3NMlKMuBq4F9nLoMCuZeWnuXzb3XAX84AO6pCLdEII8nSodoJAyFkYgXLJAOphnC05SXV9IWgvwQOB04C5ifsbwTKZ8sOF4sxi8RLUT9dQ+TvsgsZs1cXsHWs12GmHs6E7jC4V6RqyHS2nb9gLk3X55zujx3fUr5igxbTDvcu1769kjEVSeEMNsAD7B1xncZOSQhcDtwFLBQXNC0GEbTcd2Sn17ET/s0e8SRFhCt0L9aypNs7KLI497n+47rYKIV18FiqZsig+p6n+kU7l0tFk9zSNxryvPTuFdkLqPbjx+QPt7wENlKxgy0866SF9tSQEdtJ0bIjURJfh8G9k8pR0s+jQG8b6/nvAU4B3iqh5VU1DT0KqnvWhOnwIHS5V5Rg0SyzZ6Stn3LELnXcJ6VxP7SNx6UvuK+R7sA7m1JcA9qOBGkneVsoj15iuic3YTZvUncr4N6jEiDjNH1ipskd2FYKGb7tY570i2oM+lov9pxQcYxZ6bluEmrCwo/JNvoVWnD06VNXe5NMPwEyzTuIX3lS9J3isx31L79iPR56jRgakE/WqAZ6l6/CvgCW2+I1prDrK6Ce5IcdZaI/1+kua4d89+Ak8dQtPRdT5Y6KEKskm1yPfF6O9e6rjL3krueLJU+tKqkPvrRuoiWFvC8RLymiPyjTcBxibhUlUVqNtPdLfM+wK3Eeyr1m4/m1vd5dRvtCuReWAD31HKYkjbaJ8G9Qbh7ZYiXYlLeaxPF5KO5cb3Kc0+F5Fyn43UL6Hgbxfw+KGHu1n1dUyMx6v2xvGcRnc0lzrljYGm1EtybLqD+9O9rpW3cZ40C99w+dJC858YCuNd1hP7chDZU2rLq9kEWrbCnE+b3KGZ1J831C+W9+40vdFNGu9YIi1UR3OsmuHdhSthhVOtPwxRPp/TDIrg3UbUXPr8gsdK/zwZ2rEGMoIw4147y/v1aW13i01WOqepoV4BVf4y842vGvUpxT0Xr/KoMmKqaZ/YpVu7LfZcoI9k1X8cJbqO+jygBth9rS5NqV1PjaecUuGkzq0nfR9/XqvqN1Dlj4Eb3chUVy6UvFtWvzxy2paWjzrbA4/xufpTv9q0hcLdDxBbju/+Ou0fYYqmXtPrytR5+wGgkl7pJoT/owxJIcm+xI4bjzL2WUw/9ck/zvR4XrRgK9/SBi/okjKrvRuAdYuKPe9JjmhUxCazsMyjqpjwsqnFMRmN+i+gvdcGd1FnpuJe2+0VsCemGBe/ok3vugLlo0KKlCrwD8FAfhHGnjA8dU/cva31rvRxKnP7Qj2itrrGVpaP/6gLEKsk9419vN9Hl3kwf3HtItGNgHtQ8+dYp+C19iNU3iM/omzDCzEoatQCWES9u7fRR9ysSrmedLM4VfXQcrbP1DvcmjXuzcm/C4d66PupeteJap94HQpjjpOB5gnGqtJ9Nua9hbjMdov3ENuW0tDRPZobolOygJvWvs3XvdMrvyz2tq01Sh1j4wbvv7yZ9N491q0H4ddKOpQ6YasId7ChlXrG62iGLiVU+0XprH+6h/v7GRNtWeZRXV/CZPt95SurOxCq/aCF9OI9oaTs849yzUZZgBcBtOQuqJuRV5gIWJlqH9+EeanvcXAMrV8XqZvLNRrtu4OEmVn0hcOruqpzuoc4c3ky8y0kpHeRTfarqRuAN2F7kRbbJMuIZnE7OdtmP6m7+p2VamtOq7zjcW2ZiVZil1ZS+nHf2UEXuU0W3iS6Y3InokEXfxbmuKX4I9Qv01kG0DgFeyRHX0TMf/0XuM1lBsWoK917OwT2N170idWRiVaxoNaReN+UYTHRx+YvSvoVtZKDm2sU5lFTJtY54z3MTq2Khs7bnSF1vJt+GiB+vYPso9y7K6XpoXZyTqCtDsTGtw4Ff4T8Jp1pycaK9+xrBA+BY4rVavjMCv7C4QanQaeftiE8t9h1UusBPiTK9q5JQqgmii8W68j3OSuvgLqkbi5mWA7XKj8uhEe7vj03Ex/qKH6zGfz9sLchnbHQbiGgpee4knvb37dwPVcjK0jI8lEOE9f3vdDqUiVW5A+Y2zoDpy70ucTJzsx/CNIjS8n0Jo7+9m2gLWRvdBmOR6MDQyRFT0DY7pgKipc8+Jgf3uo7lOC9RN4ZyB8yAeO1he5Dc02DnHk6Mo4vfliZdotNrCvFNDZljPk2iI5+mPGMKGtBeRbQDwrByszTnSg+Q6HiM2BqGmJI6aBr3BgZ15Y5KaIAv9/S0q4Yv8QGuy2Hi6W/PNrEaqnWyKqd5HgJHD9HK0mcendMV1H3/q+LajtuACfF+Wnl04yjftlNXcC+iw0B9gp06Gj5JvMDRzPHBu4YTwO7Aj/HbOVLjCQ9XQLAexi9uqu/5Y3n3CePeULinGyM8iV8aimrHC8ABeKQ5tKSxr8mhklq4XSx2UAnzXE8u8kn0nSFaenXSECxkfdZJUgYf7uk71ubElhEWLUQDfJOZdaLuLLZe8J8peKY+qI8f6q5PM8JUQ7Ru8Bx4tOP/JQVMM+cocyDP9hFafbcbjHuV4t6NntzTFJtVWQ0ed3ZmM9m35XVXYe9LfXYAGPVYVlPaY51nW2qy70IGt0+UPmch8RYmWcvbdrhny76qwb3A4Z7P5I+GAFbMFZZwZ2ce8FRG/d3KIbgRhrldrFvwC2ArwS4doMWiz7iUrfcCz0rwW4x7leTeSk/uadzrAWB7Zpmt1mD723M8ICQKks7HNkOr4ki3F9FUf9Y27cjnJWBPyj+wVu+/pzyz4xH7aMu77WWWfaWgCaXzgXvxn0AJgTcnrawkCUPgcvnOglAKtoUoo32LQzTD8NGRxn6OaFugpgwwWQQkBN4oo1y35EGoIc/YXp4ZZhTIGbn2NnnHpryzYfhQDdgCrHHc96zoAif04oFuLbIb0bRwN+MI13WsrMC5l6E60HbZQ8iTdSJFY17fniuWUJAliDwr60jsvsebegzAhmpwb08PTXEtrCd7cU/jB2fgt4DRnZ2ZtPhBZU1znSJ+mezBbCXNU0SB8LIFa6E8K2s4Qrn3+QEIqqH/WNaXyR4X122Bfkm8O2wzqYR6lJTPCNeWTrAPts9VlaFrOT+EX7qA7pd1ZmJgK7psyDM6Ocp2WollMxQzGOmM4U/IPlutGnSHaFNAwoVbgN+BiXrDJ2yEq4WV1SQ6yPJ/PQYlNeGfJ9rmpegUB73fYnlG1kRDJf3zEvca54NP6yJaiFZktaC7jhupJ5Y33LjTDsCGHIW5xmIHlYcGQDfIKOcjKAA7E2+FW0bZNsoz8BCeBvC3RHk+YBM9dYhnXZNjQNsk2tRImuRf9HQXVCX3NgurVqPcWz1HuQ5RsP6EEtpZ73UC8Qyzj3X/ZgtF1Ip7e+OfDxiKNgFM6PT1YuD3idMU5kJbCnEH0WLFFjadXAcrq0G0oP0l+Xsuq6QhbT0PeLczUhY56iL3nifPamTgXgDcKi6hpTJUHx3RiBdEM5rSjlksrFC0aTEQBnLh3kRblHbJNtOnsYY1REt4LH5QfXTFmn4G+J50ep+crI5cX6TrFco9NW4VZHwPzdvabOGI2qAh7bWG7LmaLWnnY0Wjfity+8tNsroJatZt6xl3MAzfNG8Ap+C3VlR5cXCBbqHe42BPF7UtZT/FQhG1EyxEM9r4Te51RKN+i+94kEbV8VGitPuGCVbtSNPAbxtl5cXSEgRrqadgKQcbNljWjnsN0YxH8ZsRDkWjCOQmu3j6oxAdVb1FzDaboakHQhGKSeJApk/854ISynRBDu59Ud6hadyrFfdaohlX5+DeLkhaQwi8mqMA21ob1BK619nDziiWFcsoPg9rmSfpdaH9a1j8qq7Iox2vIkH33YAdyTZDqNH+J4iy4rNG+w3Vw045xGc9xQfd1+cQuZ2s+WoJzS5YKRqSJbtAZwp3BHYLgHdJHKGTccTSaP9Gh3SG+kDb+VvAs0KgLKvoQ6KM40UOD/qxrJB7LcjIoa6U9Vkpe4ClM9TRLUS0Yyojh7SdlwLvCsSn9BUdO2ewvtC0gLVEx4sHGdpfLen9gVMdSzsvdGQ9Ve6pI+9cZA+kzGuJUxsM9UMjh1sYAltUvXzF5yKzrGqPoKaDTgOLXY2CpfVIjnbvBMDrczzwZ1bnI2FpbZdT6IoUTV9sZ5bVSODKHNe8PgCucMz0rJi0+h4JfD3HNVMFPn9qQGU2VA+LPUMIAFfkHS3NHRwNrPQ0yQEOpP/8J80HOzBx76LLbKi2hT8QkzzEBGtUsL3HbzUo/jGi3UGzLFTuJXxtucfHEvcuusyG6iKXjgQ5CWdbIY8G8qQFbCpowArlXoMos6F6aOUZ8AJPgjWItib5Ndm2JzGMHoKK3stQH8vKd5ujXITRfYjuJNoiooXN1oxKLKHt8bE2N/TLt5ZoyJ2iKZlXy+Rx7RZgSaOjZjHN8/j9QqsyQwFoEO/V7uVH5lFIcwXrDT1g9YfAJ4HDiZe+zGZht4B/IkpHsJ0+Df26ht7WugXPx1u0OsR5eHmuNxgGChMsg+8RWaGJlaFAK8sEy2CWkqHSA2Qb2A94D54L6W1a2WAwDMOymk+OrYpMsAwGwzCQZ/IuNMEyGAzDgm96VMMEy2Aw1AW/MsEyGAxVh2bCf9IEy2AwDAN/n+OawATLYDAMGgHwe3kvNBgMhkGiS3TylgmWwWCotGUVArsTnSWhJzjNBk0s/W/gFhMsg8EwKOgZmMcDe5L9LFSITvqeMsEyGAyDRIN8Z6E2sDwsg8EwQKFqEx3CfBl+W613gQuxTHeDwTBg7EoUv/KxsAJgA1jQ3WAwDAYtEam/ItrhNsupS3oq/X8SHd7cNMEyGAyDcAe7wI5EwfYwo7GkQfn/MsEyGAyDQiCCtTPwdubejtu9rg2sV9EzwTIYDINACLyb7LGrUNzIgChIHwId23HUYDCUbV2F4gqeQ3wuYRbBAnjQvcYsLIPBUCY02H4E0frBdkbd0aD8TUTLeFpYWoPBYCgZHRGsd8p3ltiVHrb6ItGSnEDuYxaWwWAoDXp25aHAiR6CpbOI64lmCHWW0U7NMRgMpSEQjblEBMdn7SDAZ5K/NwvLYDCUZV21gQOA48RqmvB0JR8jcTq0CZbBYCgLIfBpz2tmxAX8FvCciFzHBMtgMJQFnRk8ElhG9plBtcwC4HKiLWU6ZmEZDIayLasucDGwQCymLLlXKmzfBB4n3j/LBMtgMJQCnRk8BFghf2edGQSYAj4r2vQ7ImeCZTAYioLqyRuAe8m2I4NCc6/uB/6DeP8sEyyDwVAKGmJRnQdsK//tozFt4NLZrjHBMhgMRaAlVtI/ABcQzfY1M17rzgw+5biVJlgGg6EUV7AtruDHiU+6yQp3ZnCml1iZYBkMhiLEqgnsANxHHHfKGrvSmcHbgf8hZWbQBMtgMBTpCs4Afw7s7VhMWaDpD5uZZWYw+TCDwWDIgwlgGjgLuE6Ey0dTusAk8B6ifdtbpMwMmoVlMBj6xaQI1OlEe1ZpWkJWV1C3nVkNfJfEEhyzsAwGQxmW1U1iFTU9xMrdZuZ4om1kdGdSzMIyGAxFitUM8N6cYoVcs4XocNQNxCkRc8IEy2Aw+LqBZwBfIV524yNWHRG9J4j2u0rNaDfBMhgMRbiB7wVuJk5H8BGrrrh9L8t9WvidAG0xLIPBMKdR0xKxeh9wY043UAWrBRwNPE18XqFXYQwGgyENmsQ5DZwpYpXHDUTu0RLr7Gk84lYmWAaDIYtYdYBdgYuAfyTek91XrGaI4l9fIZpZbJEhhcFcQoPBkFWoOsCBwDeAJWTf1yqJNlH860bgA45YhXkKZxaWwWBArCYVq0ngKqJDIJYQx6x8oZnvtxUhVmZhGQwGtar0GK7DgDuAnYljTHl0oiv3fY14nSD9iJVZWAbDeEOFSLeDuRW4R8RK41V5NKLrfJ8IPIpnvpVZWAaDQV0/XQbTFg04BXg/cJRjBTVz3r/tWGzHEm05o9nxhSmswWAYfaHSrWB0hu5UohnA/RNi08j5DBXA14ATihYrcwkNhvEQKbWoZkRAjgMeBv5ZxCp03MK8YqUB9huAPwL+VcRvpsgXMgvLYBgtgXLPAOwQx43+APgIsJ/j+unymqAPF7Ar95kkWgz9Qfn3nvuym2AZDOMpTvrddKwcdxZuIXAycChRpvoCR2SK6P+hiN0k8GXgQ8TrAztlvLQJlsFQTTFqzmHVdB3R0L/niyV1GnAEsA2wr3NdO8O9s2JahOoVojyrD1NAnpUJlsFQP4TMnQKwSMThUOAvxLo6QITKxYzj9hXR31UsJ4G1wNuANSKC7bIrxgTLYKiWZRWKGJ0sf7tBcI0LHUaUitABXpf4jWt5NYiC7EVBl+cERAH7vxGxKnQm0ATLYKgHAhGFrxGlBWSFHkRalLuXJlQamH8e+DzwOafMM4OqIBMsg6F6WEKcL9XsIWxuStJESeXQ+JiW4fvAnwEbiQ+N6A6yYkywDIbqYbMIQj/pBv1Ck0CbwHeALwD3EmfBzwyjUCZYBkM1XcNhwE0gbQG/JNpe5iPObxqUlLJggmUwGHxdvxYwRRSjugl4jnh3UN2TfWgwwTIYxhe6pcyEiNVmoi2MLwP+T34zkHQFEyyDwdBLpPQwCA3e/0Jcv+uAHzlCVVrGugmWwWDoJVCak6UBc42R3Qd8U77XyL9NiEXVqeLLmGAZDKOF0PlWd8/Fc0TpCbcDdzu/V4tqpsovZ4JlMIyGi6ei4y6KDoCfAz8jWkbzd8BP5eNqQLeqFpUJlsFQDxHqzCEiaS4ewAb5twfFivqe4+7huH2a9NmuU8WYYBkM1cM2IjpZkkbXims3ISL1denX65zfqLvXqIPbZ4JlMNQDGk96BNhEvDSnK1bUi8CVxMmbAfAS0Sxfr/5dG3fPBMtgqJ8rCHCG53UTzvXubg3tUaug/wfQhLVTJjkAcAAAAABJRU5ErkJggg==',
+    incluirQR: false // activar en Fase 10 si decides que el QR vale la pena vs. el papel que consume
+  };
+
+  /**
+   * Carga el logo configurado como objeto Image listo para dibujar en el
+   * canvas. Si no hay logo configurado o falla la carga, resuelve null en
+   * vez de rechazar — así el ticket se sigue generando sin logo, nunca se
+   * rompe por esto.
+   */
+  function _cargarImagenLogo() {
+    return new Promise(function (resolve) {
+      if (!CONFIG_TICKET.logoBase64) { resolve(null); return; }
+      const img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = CONFIG_TICKET.logoBase64;
+    });
+  }
+
+  /**
+   * Dibuja el ticket en un lienzo del ancho exacto del papel y devuelve el
+   * canvas. Es la ÚNICA fuente de verdad del diseño: tanto el PNG que se
+   * ve en pantalla como el mapa de bits que se manda a la impresora salen
+   * de aquí, así que lo impreso es idéntico a lo que se ve en el teléfono.
+   */
+  async function _construirCanvasTicket(registro) {
+    const ancho = ANCHO_TICKET_PX;
+    const margen = MARGEN_TICKET_PX;
+    const anchoUtil = ancho - margen * 2;
+    const alturaTrabajo = 900; // lienzo generoso; se recorta al final al contenido real
+
+    const canvas = document.createElement('canvas');
+    canvas.width = ancho;
+    canvas.height = alturaTrabajo;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, ancho, alturaTrabajo);
+    ctx.textBaseline = 'top';
+
+    let y = margen;
+
+    const logo = await _cargarImagenLogo();
+    if (logo) {
+      const anchoLogo = 150; // ancho fijo en el ticket; se respeta la proporción real del logo
+      const altoLogo = anchoLogo * (logo.height / logo.width);
+      ctx.drawImage(logo, (ancho - anchoLogo) / 2, y, anchoLogo, altoLogo);
+      y += altoLogo + 8;
+    }
+
+    y = _dibujarCentrado(ctx, CONFIG_TICKET.nombreEmpresa, ancho / 2, y, 'bold 20px sans-serif');
+    y += 6;
+    y = _dibujarDivisor(ctx, margen, y, anchoUtil);
+    y += 4;
+
+    y = _dibujarCentrado(ctx, 'VALE #' + registro.numeroVale, ancho / 2, y, 'bold 32px monospace');
+    y += 4;
+    y = _dibujarDivisor(ctx, margen, y, anchoUtil);
+    y += 4;
+
+    const filas = [
+      'Fecha: ' + registro.fecha,
+      'Hora: ' + registro.hora,
+      'Tipo: ' + registro.tipo,
+      'Checador: ' + registro.checador,
+      'Empresa: ' + registro.empresa,
+      'Camión: ' + (registro.camion || '—'),
+      'Placa: ' + (registro.placa || '—'),
+      'Conductor: ' + (registro.conductor || '—'),
+      'Material: ' + registro.material,
+      'Volumen: ' + registro.volumenReal + ' m³',
+      'Origen: ' + registro.origen,
+      'Destino: ' + registro.destino
+    ];
+    filas.forEach(function (linea) {
+      // Se envuelve en vez de dibujar en una sola línea: con la letra más
+      // grande, un nombre de obra o banco largo se saldría del papel.
+      y = _dibujarParrafoEnvuelto(ctx, margen, y, anchoUtil, linea, '21px sans-serif');
+    });
+
+    if (registro.observaciones) {
+      y += 4;
+      y = _dibujarDivisor(ctx, margen, y, anchoUtil);
+      y += 4;
+      y = _dibujarLinea(ctx, margen, y, 'Obs:', 'bold 19px sans-serif');
+      y = _dibujarParrafoEnvuelto(ctx, margen, y, anchoUtil, registro.observaciones, '19px sans-serif');
+    }
+
+    y += 4;
+    y = _dibujarDivisor(ctx, margen, y, anchoUtil);
+    y += 2;
+    y = _dibujarCentrado(ctx, registro.fecha + ' ' + registro.hora, ancho / 2, y, '13px sans-serif', '#000000');
+    y += margen;
+
+    // Recorte final: el canvas de trabajo era más alto de lo necesario "por
+    // si acaso"; esto es lo que realmente ahorra papel del rollo.
+    const alturaFinal = Math.ceil(y);
+    const canvasFinal = document.createElement('canvas');
+    canvasFinal.width = ancho;
+    canvasFinal.height = alturaFinal;
+    canvasFinal.getContext('2d').drawImage(canvas, 0, 0, ancho, alturaFinal, 0, 0, ancho, alturaFinal);
+
+    return canvasFinal;
+  }
+
+  /** El ticket como imagen PNG, para vista previa y para compartir. */
+  async function generarTicketPNG(registro) {
+    const canvas = await _construirCanvasTicket(registro);
+    return canvas.toDataURL('image/png');
+  }
+
+  // ---- Helpers de dibujo (texto negro puro, sin grises: los térmicos
+  // directos no manejan bien el antialiasing gris) ----
+
+  function _dibujarCentrado(ctx, texto, xCentro, y, fuente, color) {
+    ctx.font = fuente;
+    ctx.fillStyle = color || '#000000';
+    ctx.textAlign = 'center';
+    ctx.fillText(texto, xCentro, y);
+    ctx.textAlign = 'left';
+    return y + _alturaLinea(fuente);
+  }
+
+  function _dibujarLinea(ctx, x, y, texto, fuente) {
+    ctx.font = fuente;
+    ctx.fillStyle = '#000000';
+    ctx.fillText(texto, x, y);
+    return y + _alturaLinea(fuente);
+  }
+
+  function _dibujarDivisor(ctx, x, y, anchoUtil) {
+    ctx.font = '13px monospace';
+    ctx.fillStyle = '#000000';
+    const anchoCaracter = ctx.measureText('-').width;
+    const repeticiones = Math.max(Math.floor(anchoUtil / anchoCaracter), 1);
+    ctx.fillText('-'.repeat(repeticiones), x, y);
+    return y + _alturaLinea('13px monospace');
+  }
+
+  function _dibujarParrafoEnvuelto(ctx, x, y, anchoMax, texto, fuente) {
+    ctx.font = fuente;
+    ctx.fillStyle = '#000000';
+    const palabras = String(texto).split(' ');
+    let linea = '';
+
+    palabras.forEach(function (palabra) {
+      const pruebaLinea = linea ? linea + ' ' + palabra : palabra;
+      if (ctx.measureText(pruebaLinea).width > anchoMax && linea) {
+        ctx.fillText(linea, x, y);
+        y += _alturaLinea(fuente);
+        linea = palabra;
+      } else {
+        linea = pruebaLinea;
+      }
+    });
+
+    if (linea) {
+      ctx.fillText(linea, x, y);
+      y += _alturaLinea(fuente);
+    }
+    return y;
+  }
+
+  function _alturaLinea(fuenteCss) {
+    const coincidencia = /(\d+)px/.exec(fuenteCss);
+    const tamano = coincidencia ? parseInt(coincidencia[1], 10) : 12;
+    return Math.round(tamano * 1.45); // aire entre líneas: ayuda a la legibilidad tanto como el tamaño
+  }
+
+  // ============================================================================
+  // TICKET PARA LA IMPRESORA (CPCL con el ticket como mapa de bits)
+  // ============================================================================
+  // Por qué existe esto además del PNG:
+  // Cuando se comparte el PNG a una utilidad que manda el archivo "en crudo"
+  // al puerto Bluetooth, la impresora recibe los BYTES del archivo y los
+  // imprime como texto — por eso salía "PNG" y puros símbolos. La impresora
+  // no sabe abrir archivos de imagen; solo entiende comandos.
+  //
+  // Primer intento (descartado): armar el ticket con comandos de TEXTO de
+  // CPCL (T, SETMAG...). El problema es que hay que adivinar cuánto mide
+  // cada fuente interna de la impresora para calcular saltos de línea y
+  // centrados — y si el cálculo falla, el texto se encima y se desalinea,
+  // que fue exactamente lo que pasó.
+  //
+  // Solución definitiva: mandar el ticket COMPLETO como un solo mapa de
+  // bits, generado del mismo lienzo que se ve en pantalla. No se usa
+  // ninguna fuente de la impresora, así que no hay nada que adivinar: lo
+  // que se imprime es idéntico, punto por punto, a la vista previa.
+  // ============================================================================
+
+  const ANCHO_TICKET_DOTS = 384; // 48 mm a 203 dpi (igual que el lienzo)
+
+  /**
+   * Genera el archivo CPCL listo para enviarse a la impresora: el ticket
+   * completo va embebido como gráfico con el comando EG.
+   */
+  async function generarTicketCPCL(registro) {
+    const canvas = await _construirCanvasTicket(registro);
+    const grafico = _canvasAGraficoCPCL(canvas);
+
+    // ! 0 200 200 <alto> 1  → offset, dpi x, dpi y, alto en puntos, copias
+    return '! 0 200 200 ' + grafico.altoDots + ' 1\r\n' +
+           'EG ' + grafico.anchoBytes + ' ' + grafico.altoDots + ' 0 0 ' + grafico.hex + '\r\n' +
+           'PRINT\r\n';
+  }
+
+  /**
+   * Convierte el lienzo a mapa de bits de 1 bit por punto, empaquetado en
+   * bytes y expresado en hexadecimal, que es lo que espera el comando EG.
+   * Cada bit en 1 imprime un punto negro.
+   */
+  function _canvasAGraficoCPCL(canvas) {
+    // EG trabaja por bytes completos, así que el ancho debe ser múltiplo de 8.
+    const anchoBytes = Math.ceil(canvas.width / 8);
+    const anchoReal = anchoBytes * 8;
+    const altoDots = canvas.height;
+
+    // Se copia a un lienzo del ancho ajustado, con fondo blanco: si el
+    // ancho no era múltiplo de 8, el relleno debe salir en blanco y no
+    // como puntos negros aleatorios.
+    const canvasAjustado = document.createElement('canvas');
+    canvasAjustado.width = anchoReal;
+    canvasAjustado.height = altoDots;
+    const ctx = canvasAjustado.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, anchoReal, altoDots);
+    ctx.drawImage(canvas, 0, 0);
+
+    const datos = ctx.getImageData(0, 0, anchoReal, altoDots).data;
+    const partes = [];
+
+    for (let fila = 0; fila < altoDots; fila++) {
+      for (let byte = 0; byte < anchoBytes; byte++) {
+        let valor = 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const x = byte * 8 + bit;
+          const indice = (fila * anchoReal + x) * 4;
+          const gris = (datos[indice] + datos[indice + 1] + datos[indice + 2]) / 3;
+          if (gris < 128) valor |= (0x80 >> bit); // oscuro = punto negro
+        }
+        partes.push(('0' + valor.toString(16)).slice(-2).toUpperCase());
+      }
+    }
+
+    return { hex: partes.join(''), anchoBytes: anchoBytes, altoDots: altoDots };
+  }
+
+  /**
+   * Comparte/descarga el CPCL como archivo de texto. Al abrirlo con una
+   * utilidad que envíe archivos a la impresora, esta lo interpreta como
+   * comandos y lo imprime con el formato y tamaño correctos.
+   */
+  async function compartirTicketCPCL(textoCPCL, nombreArchivo) {
+    const blob = new Blob([textoCPCL], { type: 'text/plain' });
+
+    try {
+      const archivo = new File([blob], nombreArchivo, { type: 'text/plain' });
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        await navigator.share({ files: [archivo], title: 'Ticket para impresora' });
+        return;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombreArchivo;
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+    URL.revokeObjectURL(url);
+  }
+
+  async function compartirOdescargarTicket(dataUrlPNG, nombreArchivo) {
+    try {
+      const blob = await (await fetch(dataUrlPNG)).blob();
+      const archivo = new File([blob], nombreArchivo, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        await navigator.share({ files: [archivo], title: 'Ticket de viaje' });
+        return;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return; // el usuario canceló el share, no es error
+      // Si algo falla con el share, seguimos con la descarga de respaldo abajo.
+    }
+
+    const enlace = document.createElement('a');
+    enlace.href = dataUrlPNG;
+    enlace.download = nombreArchivo;
+    document.body.appendChild(enlace);
+    enlace.click();
+    document.body.removeChild(enlace);
+  }
+</script>
+
+  <script>
+  // ============================================================================
+  // IMPRESIÓN DIRECTA POR BLUETOOTH (Web Bluetooth + ESC/POS)
+  // ============================================================================
+  // Requisitos para que esto funcione — los tres, sin excepción:
+  //   1. Android con Chrome (Safari/iPhone no soporta Web Bluetooth).
+  //   2. La app servida desde un hosting propio por HTTPS. Dentro del
+  //      iframe de Apps Script el navegador lo bloquea.
+  //   3. Impresora Bluetooth LOW ENERGY (BLE 4.0+). Las de Bluetooth
+  //      Clásico, como la Zebra iMZ220, no son accesibles desde el
+  //      navegador por más que se emparejen. Aparecer en los ajustes de
+  //      Bluetooth de Android NO significa que sea BLE: son dos canales
+  //      distintos y el navegador solo ve el de baja energía.
+  //
+  // El ticket se manda como gráfico ESC/POS (comando GS v 0), generado del
+  // mismo lienzo que se ve en pantalla. Se usa gráfico y no texto por lo
+  // mismo que en CPCL: con texto habría que adivinar las medidas de las
+  // fuentes internas, y un cálculo equivocado encima las líneas.
+  // ============================================================================
+
+  const ANCHO_IMPRESION_DOTS = 384; // 58 mm de papel = 48 mm útiles a 203 dpi
+  const TAMANO_FRAGMENTO = 180;     // bytes por envío
+
+  // Servicios BLE que usan las impresoras térmicas más comunes. Se prueban
+  // en orden hasta encontrar el que responda: no hay un estándar único.
+  const SERVICIOS_IMPRESORA = [
+    '000018f0-0000-1000-8000-00805f9b34fb',
+    '0000ff00-0000-1000-8000-00805f9b34fb',
+    '0000ffe0-0000-1000-8000-00805f9b34fb',
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455'
+  ];
+
+  const estadoImpresora = {
+    dispositivo: null,
+    caracteristica: null
+  };
+
+  function bluetoothDisponible() {
+    return typeof navigator !== 'undefined' && !!navigator.bluetooth;
+  }
+
+  /**
+   * Pide al usuario que elija su impresora. Solo hay que hacerlo una vez
+   * por sesión: después queda guardada en estadoImpresora.
+   */
+  async function conectarImpresora() {
+    if (!bluetoothDisponible()) {
+      throw new Error('Este dispositivo o navegador no permite Bluetooth. Usa Chrome en Android.');
+    }
+
+    // Se muestran TODOS los dispositivos cercanos, en vez de filtrar por
+    // servicio. Parece menos pulido, pero es lo que funciona: el filtro de
+    // Web Bluetooth solo encuentra impresoras que ANUNCIAN su servicio en la
+    // señal, y muchas térmicas solo anuncian su nombre. Con el filtro, una
+    // impresora perfectamente compatible simplemente no aparecía en la lista
+    // y no había forma de elegirla.
+    const dispositivo = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: SERVICIOS_IMPRESORA
+    });
+
+    // Si la impresora se apaga o se aleja, se limpia la referencia para que
+    // el siguiente intento vuelva a conectar en vez de fallar en seco.
+    dispositivo.addEventListener('gattserverdisconnected', function () {
+      estadoImpresora.caracteristica = null;
+    });
+
+    const servidor = await dispositivo.gatt.connect();
+    const caracteristica = await _buscarCaracteristicaEscritura(servidor);
+
+    estadoImpresora.dispositivo = dispositivo;
+    estadoImpresora.caracteristica = caracteristica;
+    return dispositivo.name || 'Impresora';
+  }
+
+  /**
+   * Recorre los servicios conocidos buscando uno que permita escribir.
+   * Cada fabricante usa identificadores distintos, así que en vez de
+   * asumir uno, se prueban todos y se usa el primero que sirva.
+   */
+  async function _buscarCaracteristicaEscritura(servidor) {
+    for (var i = 0; i < SERVICIOS_IMPRESORA.length; i++) {
+      try {
+        const servicio = await servidor.getPrimaryService(SERVICIOS_IMPRESORA[i]);
+        const caracteristicas = await servicio.getCharacteristics();
+
+        for (var j = 0; j < caracteristicas.length; j++) {
+          const c = caracteristicas[j];
+          if (c.properties.write || c.properties.writeWithoutResponse) return c;
+        }
+      } catch (err) {
+        // Ese servicio no existe en esta impresora: se sigue con el siguiente.
+      }
+    }
+    throw new Error('La impresora se conectó pero no expone un canal para recibir datos.');
+  }
+
+  async function _asegurarConexion() {
+    if (estadoImpresora.caracteristica && estadoImpresora.dispositivo.gatt.connected) return;
+
+    if (estadoImpresora.dispositivo) {
+      // Ya se eligió antes: se reconecta sin volver a preguntar.
+      const servidor = await estadoImpresora.dispositivo.gatt.connect();
+      estadoImpresora.caracteristica = await _buscarCaracteristicaEscritura(servidor);
+      return;
+    }
+
+    await conectarImpresora();
+  }
+
+  /**
+   * Imprime el ticket de un registro. Es la única función que necesita
+   * llamar el resto de la app.
+   */
+  async function imprimirTicketDirecto(registro) {
+    await _asegurarConexion();
+
+    const canvas = await _construirCanvasTicket(registro);
+    const datos = _canvasAEscPos(canvas);
+
+    // Se manda por partes: el Bluetooth de baja energía tiene un límite
+    // pequeño por paquete, y un ticket completo lo excede con mucho.
+    for (var i = 0; i < datos.length; i += TAMANO_FRAGMENTO) {
+      const fragmento = datos.slice(i, i + TAMANO_FRAGMENTO);
+      if (estadoImpresora.caracteristica.properties.writeWithoutResponse) {
+        await estadoImpresora.caracteristica.writeValueWithoutResponse(fragmento);
+      } else {
+        await estadoImpresora.caracteristica.writeValue(fragmento);
+      }
+      // Pausa breve: sin ella, las impresoras económicas pierden datos y
+      // el ticket sale cortado o con basura.
+      await new Promise(function (r) { setTimeout(r, 20); });
+    }
+  }
+
+  /**
+   * Convierte el lienzo del ticket a comandos ESC/POS.
+   * Se usa GS v 0 (imprimir mapa de bits), que es el que entienden
+   * prácticamente todas las térmicas ESC/POS.
+   */
+  function _canvasAEscPos(canvas) {
+    const anchoBytes = Math.ceil(ANCHO_IMPRESION_DOTS / 8);
+    const anchoReal = anchoBytes * 8;
+    const alto = canvas.height;
+
+    // Fondo blanco explícito: si el ancho no era múltiplo de 8, el relleno
+    // debe salir en blanco y no como puntos negros al azar.
+    const ajustado = document.createElement('canvas');
+    ajustado.width = anchoReal;
+    ajustado.height = alto;
+    const ctx = ajustado.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, anchoReal, alto);
+    ctx.drawImage(canvas, 0, 0);
+
+    const pixeles = ctx.getImageData(0, 0, anchoReal, alto).data;
+
+    // Encabezado: inicializar impresora + GS v 0
+    const encabezado = [
+      0x1B, 0x40,                                   // ESC @ → reiniciar
+      0x1D, 0x76, 0x30, 0x00,                       // GS v 0, modo normal
+      anchoBytes & 0xFF, (anchoBytes >> 8) & 0xFF,  // ancho en bytes
+      alto & 0xFF, (alto >> 8) & 0xFF               // alto en puntos
+    ];
+
+    const salida = new Uint8Array(encabezado.length + anchoBytes * alto + 5);
+    salida.set(encabezado, 0);
+
+    var pos = encabezado.length;
+    for (var fila = 0; fila < alto; fila++) {
+      for (var byte = 0; byte < anchoBytes; byte++) {
+        var valor = 0;
+        for (var bit = 0; bit < 8; bit++) {
+          const x = byte * 8 + bit;
+          const idx = (fila * anchoReal + x) * 4;
+          const gris = (pixeles[idx] + pixeles[idx + 1] + pixeles[idx + 2]) / 3;
+          if (gris < 128) valor |= (0x80 >> bit); // oscuro = punto negro
+        }
+        salida[pos++] = valor;
+      }
+    }
+
+    // Avanzar papel al final, para que el ticket salga completo y se pueda
+    // cortar sin que quede la última línea dentro del mecanismo.
+    salida.set([0x0A, 0x0A, 0x0A, 0x0A, 0x0A], pos);
+
+    return salida;
+  }
+
+  /**
+   * Traduce los errores de Bluetooth a algo accionable. Los mensajes del
+   * navegador son técnicos y en inglés, y no le dicen al checador qué hacer.
+   */
+  function explicarErrorImpresion(err) {
+    const mensaje = String(err && err.message ? err.message : err);
+
+    if (/User cancelled|cancell?ed/i.test(mensaje)) return null; // no es error
+    if (/not supported|bluetooth/i.test(mensaje) && !bluetoothDisponible()) {
+      return 'Este teléfono no permite imprimir directo. Se necesita Chrome en Android.';
+    }
+    if (/GATT|disconnected|connect/i.test(mensaje)) {
+      return 'No se pudo conectar con la impresora. Revisa que esté encendida y cerca.';
+    }
+    if (/No Services|no expone/i.test(mensaje)) {
+      // Este caso casi siempre significa Bluetooth Clásico, no BLE. No tiene
+      // arreglo por software: el navegador no puede hablar con esas impresoras.
+      return 'Esta impresora usa Bluetooth Clásico, no BLE, y el navegador no '
+        + 'puede enviarle datos. No hay forma de corregirlo desde la app: se '
+        + 'necesita una impresora BLE (Bluetooth 4.0 o superior). Mientras '
+        + 'tanto usa el botón de guardar el ticket como imagen.';
+    }
+    return 'No se pudo imprimir: ' + mensaje;
+  }
+</script>
+
+</head>
+<body>
+
+  <!-- ================= ENTRADA CON PIN ================= -->
+  <!-- Un solo campo: el PIN identifica al checador, así que no tiene que
+       escribir su nombre. La app lo rellena sola al entrar. -->
+  <div class="pantalla-pin" id="pantalla-pin">
+    <div class="tarjeta-pin">
+      <div class="marca-pin">
+        <span class="marca-pin-titulo">Registro de Viajes</span>
+        <span class="marca-pin-sub">Acarreo de materiales</span>
+      </div>
+
+      <label for="pin-checador">Tu PIN</label>
+      <input type="password" id="pin-checador" class="campo-pin"
+             inputmode="numeric" autocomplete="off"
+             placeholder="••••••" maxlength="20">
+
+      <button type="button" class="btn-guardar" id="btn-entrar-pin">Entrar</button>
+
+      <div class="error-pin" id="error-pin"></div>
+      <span class="ayuda" id="ayuda-pin">Se queda guardado en este celular; no tendrás que escribirlo cada día.</span>
+    </div>
+  </div>
+
+  <div class="app pantalla-oculta" id="app-captura">
+
+    <!-- ================= ENCABEZADO ================= -->
+    <header class="encabezado">
+      <div class="encabezado-marca">
+        <span class="encabezado-titulo">Registro de Viajes</span>
+        <span class="encabezado-subtitulo">Acarreo de materiales</span>
+      </div>
+      <div class="encabezado-acciones">
+        <span class="estado-conexion" id="estado-conexion" data-estado="sin-conexion" role="status" aria-live="polite">
+          <span class="punto"></span>
+          <span id="estado-conexion-texto">Sin conexión</span>
+        </span>
+        <button type="button" class="btn-icono" id="btn-sincronizar" aria-label="Sincronizar registros pendientes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-8.7-6.7M3 12a9 9 0 0 1 9-9 9 9 0 0 1 8.7 6.7"/>
+            <path d="M21 3v6h-6M3 21v-6h6"/>
+          </svg>
+          <span class="badge oculto" id="badge-pendientes">0</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="contenido">
+      <form id="form-registro" novalidate>
+
+        <!-- ================= DATOS GENERALES ================= -->
+        <section class="tarjeta" aria-labelledby="titulo-generales">
+          <h2 class="tarjeta-titulo" id="titulo-generales">Datos generales</h2>
+
+          <!-- El nombre lo pone la sesión, no se teclea. Sigue siendo un
+               input (y no un texto suelto) para que el resto de la app lo
+               lea igual que siempre. -->
+          <div class="campo">
+            <label for="checador">Checador</label>
+            <div class="fila-checador">
+              <input type="text" id="checador" name="checador" readonly tabindex="-1">
+              <button type="button" class="btn-enlace" id="btn-cerrar-sesion-checador">Cambiar</button>
+            </div>
+          </div>
+          <div class="campo">
+            <label for="obra">Obra</label>
+            <input type="text" id="obra" name="obra" placeholder="Escribe para buscar la obra" autocomplete="off" required>
+            <ul class="lista-resultados oculto" id="obra-resultados"></ul>
+            <!-- Nota FIJA: el elemento de abajo (obra-ayuda) lo sobrescribe
+                 el GPS con su estado, así que la explicación necesita su
+                 propio espacio o desaparece en cuanto se detecta la obra. -->
+            <span class="ayuda nota-fija">Obra donde estás haciendo el registro. De aquí sale el número de vale.</span>
+            <span class="ayuda" id="obra-restriccion-checador"></span>
+            <div class="ayuda-ubicacion">
+              <span class="ayuda" id="obra-ayuda">Detectando ubicación…</span>
+              <button type="button" class="btn-enlace" id="obra-reintentar">Reintentar ubicación</button>
+            </div>
+          </div>
+
+
+          <div class="fila-doble">
+            <div class="campo">
+              <span class="etiqueta-estatica">Fecha</span>
+              <div class="valor-estatico" id="fecha-actual">—</div>
+            </div>
+            <div class="campo">
+              <span class="etiqueta-estatica">Hora</span>
+              <div class="valor-estatico" id="hora-actual">—</div>
+            </div>
+          </div>
+
+          <div class="campo">
+            <span class="etiqueta-estatica">Número de vale</span>
+            <div class="vale-ticket">
+              <span class="vale-numero" id="numero-vale">—</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TIPO DE MOVIMIENTO ================= -->
+        <section class="tarjeta" aria-labelledby="titulo-tipo">
+          <h2 class="tarjeta-titulo" id="titulo-tipo">Tipo de movimiento</h2>
+          <div class="segmentado" role="group" aria-label="Tipo de movimiento">
+            <button type="button" id="btn-entrada" class="segmentado-boton" data-tipo="ENTRADA" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 4v13M6 11l6 6 6-6"/>
+              </svg>
+              Entrada
+            </button>
+            <button type="button" id="btn-salida" class="segmentado-boton" data-tipo="SALIDA" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20V7M6 13l6-6 6 6"/>
+              </svg>
+              Salida
+            </button>
+          </div>
+
+          <label class="casilla" for="ciclo-completo">
+            <input type="checkbox" id="ciclo-completo" name="cicloCompleto">
+            <span>Ciclo completo</span>
+          </label>
+          <span class="ayuda oculto" id="ciclo-ayuda"></span>
+        </section>
+
+        <!-- ========== CIERRE DE CICLO COMPLETO (entrada simplificada) ==========
+             Cuando un camión sale marcado como ciclo completo, su regreso
+             se registra aquí: basta el vale de esa salida y el volumen que
+             regresó. No se vuelven a pedir material, empresa ni camión,
+             porque ya quedaron en el registro de salida. -->
+        <section class="tarjeta oculto" id="seccion-cierre-ciclo" aria-labelledby="titulo-cierre">
+          <h2 class="titulo-seccion" id="titulo-cierre">Cierre de ciclo</h2>
+
+          <div class="campo">
+            <label for="cierre-vale">Número de vale de la salida</label>
+            <input type="text" id="cierre-vale" name="cierreVale" placeholder="Ej. PN0007" autocomplete="off" inputmode="text">
+            <span class="ayuda" id="cierre-vale-ayuda">Escríbelo tal como aparece en el vale de salida</span>
+          </div>
+
+          <div class="campo">
+            <label for="cierre-volumen">Volumen real que regresó (m³)</label>
+            <input type="number" id="cierre-volumen" name="cierreVolumen" step="0.01" min="0" placeholder="0.00" inputmode="decimal">
+          </div>
+        </section>
+
+        <!-- ================= CAMPOS DE ENTRADA ================= -->
+        <section class="tarjeta campos-entrada oculto" id="seccion-entrada" aria-labelledby="titulo-entrada">
+          <h2 class="tarjeta-titulo" id="titulo-entrada">Detalle de entrada</h2>
+
+          <div class="campo">
+            <label for="entrada-origen">Origen</label>
+            <select id="entrada-origen" name="entradaOrigen">
+              <option value="" disabled selected>Selecciona el banco</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label for="entrada-destino">Destino</label>
+            <input type="text" id="entrada-destino" name="entradaDestino" placeholder="Detectando por GPS o escribe para buscar" autocomplete="off">
+            <ul class="lista-resultados oculto" id="entrada-destino-resultados"></ul>
+            <span class="ayuda oculto" id="entrada-destino-ayuda"></span>
+          </div>
+
+          <div class="campo">
+            <label for="entrada-material">Material</label>
+            <select id="entrada-material" name="entradaMaterial">
+              <option value="" disabled selected>Selecciona el material</option>
+            </select>
+          </div>
+
+          <div class="campo">
+            <label for="entrada-vale-proveedor">Vale del proveedor <span class="opcional">(opcional)</span></label>
+            <input type="text" id="entrada-vale-proveedor" name="entradaValeProveedor" placeholder="Número de vale del banco" autocomplete="off">
+          </div>
+
+          <div class="campo">
+            <span class="etiqueta-estatica">Empresa o Fletera</span>
+            <div class="segmentado segmentado-chico" role="group" aria-label="Tipo de empresa (entrada)">
+              <button type="button" class="segmentado-boton" data-flujo="entrada" data-tipo-empresa="Interno" aria-pressed="false">Interno</button>
+              <button type="button" class="segmentado-boton" data-flujo="entrada" data-tipo-empresa="Externo" aria-pressed="false">Externo</button>
+            </div>
+            <input type="hidden" id="entrada-empresa" name="entradaEmpresa">
+          </div>
+
+          <div class="campo oculto" id="entrada-empresa-interno-info">
+            <div class="valor-estatico" id="entrada-empresa-interno-nombre">—</div>
+          </div>
+
+          <div class="campo oculto" id="entrada-empresa-externo-bloque">
+            <label for="entrada-empresa-externo-select">Selecciona la empresa</label>
+            <select id="entrada-empresa-externo-select">
+              <option value="" disabled selected>Selecciona la empresa</option>
+            </select>
+          </div>
+
+          <div class="campo bloque-camion oculto" id="entrada-bloque-camion">
+            <span class="etiqueta-estatica">Camión</span>
+            <div class="grid-camiones" id="entrada-botones-camion"></div>
+            <select class="oculto" id="entrada-select-camion">
+              <option value="" disabled selected>Selecciona el camión</option>
+            </select>
+
+            <div class="tarjeta-info oculto" id="entrada-info-camion">
+              <div class="info-fila"><span>Camión</span><strong id="entrada-camion-id">—</strong></div>
+              <div class="info-fila detalle-interno"><span>Placa</span><strong id="entrada-camion-placa">—</strong></div>
+              <div class="campo detalle-interno">
+                <label for="entrada-conductor">Conductor</label>
+                <select id="entrada-conductor" name="entradaConductor"></select>
+              </div>
+              <div class="info-fila detalle-interno"><span>Capacidad nominal</span><strong id="entrada-cap-nominal">—</strong></div>
+              <div class="info-fila detalle-interno"><span>Capacidad calculada</span><strong id="entrada-cap-calculada">—</strong></div>
+            </div>
+          </div>
+
+          <div class="campo">
+            <label for="entrada-volumen">Volumen real (m³)</label>
+            <input type="number" id="entrada-volumen" name="entradaVolumen" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+          </div>
+
+        </section>
+
+        <!-- ================= CAMPOS DE SALIDA ================= -->
+        <section class="tarjeta campos-salida oculto" id="seccion-salida" aria-labelledby="titulo-salida">
+          <h2 class="tarjeta-titulo" id="titulo-salida">Detalle de salida</h2>
+
+          <div class="campo">
+            <label for="salida-origen">Origen</label>
+            <input type="text" id="salida-origen" name="salidaOrigen" placeholder="Detectando por GPS o escribe para buscar" autocomplete="off">
+            <ul class="lista-resultados oculto" id="salida-origen-resultados"></ul>
+            <span class="ayuda oculto" id="salida-origen-ayuda"></span>
+          </div>
+          <div class="campo">
+            <label for="salida-destino">Destino</label>
+            <input type="text" id="salida-destino" name="salidaDestino" placeholder="Busca en la lista o escribe otro destino" autocomplete="off">
+            <ul class="lista-resultados oculto" id="salida-destino-resultados"></ul>
+            <span class="ayuda" id="salida-destino-ayuda">Si es un cliente ocasional, escribe su nombre directamente</span>
+          </div>
+
+          <div class="campo">
+            <label for="salida-material">Material</label>
+            <select id="salida-material" name="salidaMaterial">
+              <option value="" disabled selected>Selecciona el material</option>
+            </select>
+          </div>
+
+          <div class="campo">
+            <label for="salida-maquina">Máquina que carga <span class="opcional" id="salida-maquina-etiqueta"></span></label>
+            <select id="salida-maquina" name="salidaMaquina">
+              <option value="">Sin máquina</option>
+            </select>
+            <span class="ayuda" id="salida-maquina-ayuda">Llénalo solo cuando aplique</span>
+          </div>
+
+          <div class="campo">
+            <span class="etiqueta-estatica">Empresa o Fletera</span>
+            <div class="segmentado segmentado-chico" role="group" aria-label="Tipo de empresa (salida)">
+              <button type="button" class="segmentado-boton" data-flujo="salida" data-tipo-empresa="Interno" aria-pressed="false">Interno</button>
+              <button type="button" class="segmentado-boton" data-flujo="salida" data-tipo-empresa="Externo" aria-pressed="false">Externo</button>
+            </div>
+            <input type="hidden" id="salida-empresa" name="salidaEmpresa">
+          </div>
+
+          <div class="campo oculto" id="salida-empresa-interno-info">
+            <div class="valor-estatico" id="salida-empresa-interno-nombre">—</div>
+          </div>
+
+          <div class="campo oculto" id="salida-empresa-externo-bloque">
+            <label for="salida-empresa-externo-select">Selecciona la empresa</label>
+            <select id="salida-empresa-externo-select">
+              <option value="" disabled selected>Selecciona la empresa</option>
+            </select>
+          </div>
+
+          <div class="campo bloque-camion oculto" id="salida-bloque-camion">
+            <span class="etiqueta-estatica">Camión</span>
+            <div class="grid-camiones" id="salida-botones-camion"></div>
+            <select class="oculto" id="salida-select-camion">
+              <option value="" disabled selected>Selecciona el camión</option>
+            </select>
+
+            <div class="tarjeta-info oculto" id="salida-info-camion">
+              <div class="info-fila"><span>Camión</span><strong id="salida-camion-id">—</strong></div>
+              <div class="info-fila detalle-interno"><span>Placa</span><strong id="salida-camion-placa">—</strong></div>
+              <div class="campo detalle-interno">
+                <label for="salida-conductor">Conductor</label>
+                <select id="salida-conductor" name="salidaConductor"></select>
+              </div>
+              <div class="info-fila detalle-interno"><span>Capacidad nominal</span><strong id="salida-cap-nominal">—</strong></div>
+              <div class="info-fila detalle-interno"><span>Capacidad calculada</span><strong id="salida-cap-calculada">—</strong></div>
+            </div>
+          </div>
+
+          <div class="campo">
+            <label for="salida-volumen">Volumen real (m³)</label>
+            <input type="number" id="salida-volumen" name="salidaVolumen" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+          </div>
+
+        </section>
+
+        <!-- ================= EVIDENCIA Y NOTAS (común) ================= -->
+        <section class="tarjeta oculto" id="seccion-comun" aria-labelledby="titulo-comun">
+          <h2 class="tarjeta-titulo" id="titulo-comun">Evidencia y notas</h2>
+
+          <div class="campo">
+            <span class="etiqueta-estatica">Fotografía</span>
+            <button type="button" class="btn-secundario" id="btn-foto">Tomar fotografía</button>
+            <img class="foto-vista-previa oculto" id="foto-vista-previa" alt="Fotografía del registro">
+          </div>
+
+          <div class="campo">
+            <label for="observaciones">Observaciones</label>
+            <textarea id="observaciones" name="observaciones" rows="3" placeholder="Opcional"></textarea>
+          </div>
+        </section>
+
+      </form>
+    </main>
+
+    <!-- ================= BOTÓN GUARDAR (fijo abajo) ================= -->
+    <div class="pie-fijo">
+      <button type="submit" form="form-registro" class="btn-guardar" id="btn-guardar">Guardar registro</button>
+    </div>
+
+    <!-- ================= CAPTURA DE FOTO DE EVIDENCIA =================
+         No se usa <video> + getUserMedia porque Apps Script sirve la app
+         dentro de un iframe sandbox sin permiso de cámara, y el navegador
+         bloquea getUserMedia ahí aunque el usuario acepte. Este input abre
+         la app de cámara nativa del celular, que sí funciona.
+         Queda oculto: se dispara desde el botón de la interfaz. -->
+    <input type="file" accept="image/*" capture="environment" id="entrada-camara-foto" class="oculto-total">
+    <canvas id="canvas-camara" class="oculto-total"></canvas>
+
+    <!-- ================= MODAL: VISTA PREVIA DEL TICKET ================= -->
+    <div class="contenedor-modal oculto" id="modal-ticket" role="dialog" aria-modal="true" aria-label="Ticket">
+      <div class="modal-camara-caja">
+        <img id="ticket-vista-previa" class="ticket-imagen" alt="Ticket generado">
+        <div class="modal-camara-acciones">
+          <button type="button" class="btn-secundario" id="btn-cerrar-ticket">Cerrar</button>
+          <button type="button" class="btn-guardar" id="btn-imprimir-directo">Imprimir</button>
+        </div>
+        <!-- Alternativas: sirven cuando no hay impresora a la mano o el
+             dispositivo no permite Bluetooth. -->
+        <div class="acciones-secundarias-ticket">
+          <button type="button" class="btn-enlace" id="btn-imprimir-zebra">Enviar como archivo</button>
+          <button type="button" class="btn-enlace" id="btn-compartir-ticket">Compartir como imagen</button>
+        </div>
+      </div>
+    </div>
+
+                <!-- ================= MENSAJES ================= -->
+    <div class="contenedor-toast" id="contenedor-toast" aria-live="assertive"></div>
+
+  </div>
+
+  <script>
+  // ============================================================================
+  // JAVASCRIPT DEL FORMULARIO — Fases 4, 5, 6 y 7
+  // ============================================================================
+  // Lo que SÍ hace este archivo:
+  //   - Carga catálogos desde IndexedDB al instante y los refresca del
+  //     backend en segundo plano cuando hay conexión (Fase 7).
+  //   - Muestra/oculta los campos según ENTRADA/SALIDA.
+  //   - Muestra los botones de camión (Interno) o el selector de empresa
+  //     (Externo) según el tipo de empresa elegido.
+  //   - Buscador de camión para empresas tipo Externo (funcional).
+  //   - Al tocar un camión interno, llena Placa/Conductor/Capacidades
+  //     desde el catálogo ya descargado (sin llamar al servidor).
+  //   - Detecta la ubicación por GPS y auto-selecciona la Obra más cercana
+  //     (dentro del radio configurado) para Destino en ENTRADA y Origen en
+  //     SALIDA; si falla o no hay coincidencia, cae a selección manual.
+  //   - Calcula el número de vale según el rango asignado al checador,
+  //     combinando lo que sabe el backend con lo que ya está en la cola
+  //     local pendiente — funciona incluso sin conexión (Fase 7).
+  //   - Captura fotografía con la cámara del dispositivo y la previsualiza.
+  //   - GUARDA SIEMPRE PRIMERO EN INDEXEDDB (local-first): el registro nunca
+  //     depende de tener conexión en el momento exacto de capturarlo. Si hay
+  //     internet, se sincroniza casi de inmediato en segundo plano; si no,
+  //     se queda en la cola y se sincroniza solo al recuperar conexión, con
+  //     botón de sincronización manual como respaldo (Fase 7).
+  //
+  // Limitación conocida (aceptada desde el planteamiento original): sin
+  // Service Worker, la PRIMERA carga de la página siempre necesita internet.
+  // Mientras la pestaña siga abierta, todo lo demás funciona sin conexión.
+  // ============================================================================
+
+  const estado = {
+    catalogos: null,
+    distanciaMaximaMetros: 100,  // se sobreescribe con el valor real del backend
+    sesion: null,                // { token, nombre, expira } — ver bloque SESIÓN
+    tipoMovimiento: null,        // 'ENTRADA' | 'SALIDA'
+    checadorSeleccionado: '',
+    numeroVale: null,
+    camionSeleccionado: { entrada: null, salida: null },
+    tipoEmpresa: { entrada: null, salida: null }, // 'Interno' | 'Externo'
+    obraSeleccionada: '',
+    cicloCompleto: false,
+    cierreValidado: false,
+    ubicacionGPS: '',
+    fotoBase64: null,
+    guardando: false
+  };
+
+  let sincronizando = false;
+
+  document.addEventListener('DOMContentLoaded', inicializar);
+
+  const INTERVALO_REFRESCO_CATALOGOS_MS = 5 * 60 * 1000; // 5 minutos
+
+  function inicializar() {
+    configurarEntradaConPin();
+
+    // La app de captura no arranca hasta saber quién la está usando. Lo
+    // primero es la sesión guardada en este celular: si sigue vigente, el
+    // checador no vuelve a ver la pantalla del PIN.
+    obtenerDeAlmacen('sesion', 'actual')
+      .then(function (guardada) {
+        if (guardada && guardada.token && guardada.expira > new Date().getTime()) {
+          estado.sesion = guardada;
+          arrancarCaptura();
+          // Con señal se alarga la sesión en segundo plano, así un celular
+          // de uso diario nunca vuelve a pedir el PIN.
+          if (navigator.onLine) renovarSesion();
+        } else {
+          mostrarPantallaPin();
+        }
+      })
+      .catch(function () {
+        // Si IndexedDB falla no hay sesión que recuperar: se pide el PIN.
+        mostrarPantallaPin();
+      });
+  }
+
+  /**
+   * Arranca la app de captura. Antes esto vivía en inicializar(), pero ahora
+   * solo corre cuando ya hay una sesión válida: así nada puede capturar sin
+   * que se sepa quién fue.
+   */
+  function arrancarCaptura() {
+    document.getElementById('pantalla-pin').classList.add('pantalla-oculta');
+    document.getElementById('app-captura').classList.remove('pantalla-oculta');
+
+    estado.checadorSeleccionado = estado.sesion.nombre;
+    document.getElementById('checador').value = estado.sesion.nombre;
+
+    actualizarReloj();
+    setInterval(actualizarReloj, 1000);
+
+    actualizarEstadoConexion();
+    window.addEventListener('online', function () {
+      actualizarEstadoConexion();
+      sincronizarPendientes(false);
+      refrescarCatalogosDesdeServidor(false);
+      renovarSesion();
+    });
+    window.addEventListener('offline', actualizarEstadoConexion);
+
+    configurarEventos();
+    cargarCatalogos();
+    actualizarContadorPendientes();
+
+    if (navigator.onLine) {
+      sincronizarPendientes(false);
+    }
+
+    // Respaldo por si el evento 'online' del navegador no dispara en algún
+    // dispositivo (ocurre en algunos Android): reintenta cada minuto.
+    setInterval(function () {
+      if (navigator.onLine) sincronizarPendientes(false);
+    }, 60000);
+
+    // Refresca catálogos en segundo plano cada 5 minutos: así, cambios que
+    // hagas en el panel admin (nuevo checador, nueva obra, nuevo material,
+    // etc.) llegan al celular sin que el checador tenga que cerrar y volver
+    // a abrir la app. No es instantáneo (ver DOCUMENTACION.md), pero es
+    // automático — nadie tiene que acordarse de hacer nada.
+    setInterval(function () {
+      if (navigator.onLine) refrescarCatalogosDesdeServidor(false);
+    }, INTERVALO_REFRESCO_CATALOGOS_MS);
+  }
+
+  // ==========================================================================
+  // SESIÓN DEL CHECADOR
+  // ==========================================================================
+  // El checador escribe SOLO su PIN; con eso el servidor sabe quién es y
+  // devuelve su nombre. En este celular se guarda el token que el servidor
+  // emitió, NUNCA el PIN: si alguien revisara el almacenamiento del teléfono
+  // no encontraría con qué entrar en otro.
+  //
+  // La sesión dura una semana y se renueva sola cuando hay señal. Así se
+  // sostienen las dos cosas a la vez: capturar días enteros sin cobertura, y
+  // que un celular extraviado deje de servir por su cuenta.
+  // ==========================================================================
+
+  function mostrarPantallaPin() {
+    document.getElementById('app-captura').classList.add('pantalla-oculta');
+    document.getElementById('pantalla-pin').classList.remove('pantalla-oculta');
+    const campo = document.getElementById('pin-checador');
+    campo.value = '';
+    campo.focus();
+  }
+
+  function configurarEntradaConPin() {
+    const campo = document.getElementById('pin-checador');
+    const boton = document.getElementById('btn-entrar-pin');
+
+    boton.addEventListener('click', entrarConPin);
+
+    // Enter en el teclado numérico: entrar sin tener que buscar el botón.
+    campo.addEventListener('keydown', function (evento) {
+      if (evento.key === 'Enter') {
+        evento.preventDefault();
+        entrarConPin();
+      }
+    });
+
+    // El mensaje de error se limpia al corregir, para que no quede un
+    // "PIN incorrecto" viejo mientras se escribe el nuevo.
+    campo.addEventListener('input', function () {
+      document.getElementById('error-pin').textContent = '';
+    });
+  }
+
+  function entrarConPin() {
+    const campo = document.getElementById('pin-checador');
+    const boton = document.getElementById('btn-entrar-pin');
+    const error = document.getElementById('error-pin');
+    const pin = campo.value.trim();
+
+    if (!pin) {
+      error.textContent = 'Escribe tu PIN.';
+      return;
+    }
+
+    if (!navigator.onLine) {
+      // El PIN se compara en el servidor, así que la PRIMERA entrada de cada
+      // celular necesita señal. Después ya no.
+      error.textContent = 'Necesitas conexión para entrar la primera vez. Busca señal y vuelve a intentar.';
+      return;
+    }
+
+    boton.disabled = true;
+    boton.textContent = 'Entrando…';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        boton.disabled = false;
+        boton.textContent = 'Entrar';
+
+        if (!respuesta || !respuesta.exito) {
+          error.textContent = (respuesta && respuesta.error) || 'No se pudo entrar.';
+          campo.value = '';
+          campo.focus();
+          return;
+        }
+
+        estado.sesion = {
+          id: 'actual',
+          token: respuesta.token,
+          nombre: respuesta.nombre,
+          expira: new Date().getTime() + respuesta.expiraEn
+        };
+
+        guardarEnAlmacen('sesion', estado.sesion)
+          .catch(function () {
+            // Sin almacenamiento la sesión vive solo mientras la pestaña
+            // esté abierta. Se avisa, pero no se impide trabajar.
+            mostrarToast('No se pudo guardar la sesión en este celular: tendrás que escribir el PIN cada vez que abras la app.', 'error');
+          })
+          .then(function () { arrancarCaptura(); });
+      })
+      .withFailureHandler(function (err) {
+        boton.disabled = false;
+        boton.textContent = 'Entrar';
+        error.textContent = 'No se pudo conectar con el servidor: ' + err.message;
+      })
+      .iniciarSesionChecador(pin);
+  }
+
+  /**
+   * Alarga la sesión sin pedir el PIN. Silenciosa a propósito: corre en
+   * segundo plano y al checador no le interesa enterarse.
+   */
+  function renovarSesion() {
+    if (!estado.sesion || !estado.sesion.token) return;
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (!respuesta || !respuesta.exito) return; // se reintenta la próxima vez
+        estado.sesion.token = respuesta.token;
+        estado.sesion.nombre = respuesta.nombre;
+        estado.sesion.expira = new Date().getTime() + respuesta.expiraEn;
+        guardarEnAlmacen('sesion', estado.sesion).catch(function () { /* no es crítico */ });
+      })
+      .withFailureHandler(function () { /* sin señal o servidor caído: se reintenta */ })
+      .renovarSesionChecador(estado.sesion.token);
+  }
+
+  /**
+   * Sale de la sesión. Avisa si quedan registros sin sincronizar, porque esos
+   * registros pertenecen al checador que los capturó y conviene mandarlos
+   * antes de que el celular cambie de manos.
+   */
+  function cerrarSesionChecador() {
+    contarEnAlmacen('registrosPendientes')
+      .catch(function () { return 0; })
+      .then(function (pendientes) {
+        var aviso = '¿Salir de la sesión de ' + estado.sesion.nombre + '?';
+        if (pendientes > 0) {
+          aviso += '\n\nOJO: hay ' + pendientes + ' registro(s) sin sincronizar. ' +
+                   'Se quedan guardados y se mandan solos cuando haya señal, pero es mejor ' +
+                   'sincronizarlos antes de cambiar de checador.';
+        }
+        if (!confirm(aviso)) return;
+
+        estado.sesion = null;
+        estado.checadorSeleccionado = '';
+        eliminarDeAlmacen('sesion', 'actual')
+          .catch(function () { /* da igual: igual se recarga */ })
+          .then(function () {
+            // Recargar deja la app en limpio. Es lo más seguro: así no
+            // quedan datos a medio capturar del checador anterior.
+            window.location.reload();
+          });
+      });
+  }
+
+  /**
+   * El servidor rechazó la sesión (expiró, o le cambiaron el PIN). Se avisa y
+   * se manda a la pantalla del PIN. Los registros pendientes NO se borran:
+   * siguen en la cola y se mandan cuando vuelva a entrar.
+   */
+  function manejarSesionInvalida(mensaje) {
+    mostrarToastLargo(mensaje || 'Tu sesión expiró. Vuelve a entrar con tu PIN.', 'error');
+    estado.sesion = null;
+    eliminarDeAlmacen('sesion', 'actual').catch(function () { /* no importa */ });
+    setTimeout(mostrarPantallaPin, 1200);
+  }
+
+  // ==========================================================================
+  // RELOJ (fecha y hora automáticas, no editables)
+  // ==========================================================================
+  function actualizarReloj() {
+    const ahora = new Date();
+    document.getElementById('fecha-actual').textContent = formatearFecha(ahora);
+    document.getElementById('hora-actual').textContent = formatearHora(ahora);
+  }
+
+  function formatearFecha(fecha) {
+    const dia = String(fecha.getDate()).padStart(2, '0');
+    const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+    return dia + '/' + mes + '/' + fecha.getFullYear();
+  }
+
+  function formatearHora(fecha) {
+    const horas = String(fecha.getHours()).padStart(2, '0');
+    const minutos = String(fecha.getMinutes()).padStart(2, '0');
+    const segundos = String(fecha.getSeconds()).padStart(2, '0');
+    return horas + ':' + minutos + ':' + segundos;
+  }
+
+  // ==========================================================================
+  // ESTADO DE CONEXIÓN
+  // ==========================================================================
+  function actualizarEstadoConexion(forzado) {
+    const contenedor = document.getElementById('estado-conexion');
+    const texto = document.getElementById('estado-conexion-texto');
+    const estadoFinal = forzado || (navigator.onLine ? 'conectado' : 'sin-conexion');
+    const etiquetas = { conectado: 'Conectado', 'sin-conexion': 'Sin conexión', sincronizando: 'Sincronizando…' };
+
+    contenedor.dataset.estado = estadoFinal;
+    texto.textContent = etiquetas[estadoFinal];
+  }
+
+  // ==========================================================================
+  // CATÁLOGOS
+  // ==========================================================================
+  function cargarCatalogos() {
+    obtenerDeAlmacen('catalogos', 'actual')
+      .then(function (registroCache) {
+        if (registroCache) {
+          estado.catalogos = registroCache.datos;
+          estado.distanciaMaximaMetros = registroCache.distanciaMaximaMetros || 100;
+          poblarSelects();
+        }
+
+        if (navigator.onLine) {
+          refrescarCatalogosDesdeServidor();
+        } else if (!registroCache) {
+          mostrarToast('Sin conexión y sin catálogos guardados en este dispositivo. Conéctate al menos una vez para poder trabajar offline.', 'error');
+        }
+      })
+      .catch(function () {
+        if (navigator.onLine) {
+          refrescarCatalogosDesdeServidor();
+        } else {
+          mostrarToast('No se pudieron leer los catálogos guardados en este dispositivo.', 'error');
+        }
+      });
+  }
+
+  function refrescarCatalogosDesdeServidor(mostrarConfirmacion) {
+    google.script.run
+      .withSuccessHandler(function (respuesta) { onCatalogosCargados(respuesta, mostrarConfirmacion); })
+      .withFailureHandler(function (err) {
+        if (mostrarConfirmacion) {
+          mostrarToast('No se pudieron actualizar los catálogos: ' + err.message, 'error');
+        } else if (!estado.catalogos) {
+          // Carga inicial silenciosa: solo avisamos si de plano no hay nada que mostrar.
+          mostrarToast('No se pudieron cargar los catálogos: ' + err.message, 'error');
+        }
+      })
+      .obtenerCatalogos(estado.sesion ? estado.sesion.token : null);
+  }
+
+  function onCatalogosCargados(respuesta, mostrarConfirmacion) {
+    if (!respuesta.exito) {
+      if (mostrarConfirmacion) {
+        mostrarToast('Error al actualizar catálogos: ' + respuesta.error, 'error');
+      } else if (!estado.catalogos) {
+        mostrarToast('Error al cargar catálogos: ' + respuesta.error, 'error');
+      }
+      return;
+    }
+
+    estado.catalogos = respuesta.datos;
+    estado.distanciaMaximaMetros = respuesta.distanciaMaximaMetros || 100;
+    poblarSelects();
+
+    guardarEnAlmacen('catalogos', {
+      id: 'actual',
+      datos: respuesta.datos,
+      distanciaMaximaMetros: respuesta.distanciaMaximaMetros,
+      actualizado: new Date().getTime()
+    }).catch(function () { /* si no se puede cachear, no es crítico ahora mismo */ });
+
+    if (mostrarConfirmacion) mostrarToast('Catálogos actualizados.', 'exito');
+  }
+
+  /**
+   * Compara dos textos ignorando mayúsculas, acentos y espacios de sobra.
+   * Es el mismo criterio que usa el backend (_mismoTexto en Code.gs): sin
+   * esto, un "externo" en minúscula en el Sheets hacía que la lista de
+   * empresas apareciera vacía, aunque el diagnóstico del servidor (que sí
+   * compara tolerante) reportara que todo estaba bien.
+   */
+  function _mismoTextoCliente(a, b) {
+    const normalizar = function (t) {
+      return String(t == null ? '' : t)
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .toLowerCase();
+    };
+    return normalizar(a) === normalizar(b);
+  }
+
+  /**
+   * ¿Este elemento del catálogo aplica en la obra indicada?
+   *
+   * La columna "Obra" admite varias separadas por comas. Si está VACÍA, el
+   * elemento aplica en TODAS las obras — así, agregar la columna no deja de
+   * golpe a todos fuera de las listas, y sirve para los casos que de verdad
+   * son generales (un checador que rota, una fletera que trabaja en todas).
+   */
+  function _aplicaEnObra(elemento, nombreObra) {
+    const asignadas = String(elemento.Obra || '').trim();
+    if (!asignadas) return true;
+    if (!nombreObra) return true; // sin obra elegida todavía, no se filtra
+
+    return asignadas.split(/[,;\n]/).some(function (o) {
+      return _mismoTextoCliente(o.trim(), nombreObra);
+    });
+  }
+
+  function poblarSelects() {
+    // El campo Checador, y los campos de ubicación (entrada-destino,
+    // salida-origen, salida-destino) ya NO son <select> — son texto libre
+    // con autocompletado propio (ver configurarAutocompleteTexto). No hay
+    // nada que "llenar" en ellos aquí; el filtrado se hace en vivo sobre
+    // estado.catalogos en cada tecleo.
+
+    // Obras del checador de la sesión. Va aquí y no en configurarEventos
+    // porque necesita los catálogos ya cargados. Si solo tiene una obra
+    // asignada, queda elegida sola y el checador no toca ese campo.
+    if (estado.sesion) manejarCambioChecadorConObras();
+
+    llenarSelect('entrada-origen', _bancosActivos(), 'Nombre');
+    // Los materiales dependen del origen del movimiento, así que se llenan
+    // al elegirlo (ver filtrarMaterialesPorOrigen).
+    filtrarMaterialesPorOrigen('entrada');
+    filtrarMaterialesPorOrigen('salida');
+
+    llenarSelect('salida-maquina', estado.catalogos.maquinas, 'Nombre');
+
+    // El botón "Interno" resuelve la empresa sola (la que tenga Tipo =
+    // Interno); el select de "Externo" solo debe mostrar empresas Externo.
+    const empresasExternas = _empresasDeLaObra().filter(function (e) { return _mismoTextoCliente(e.Tipo, 'Externo'); });
+    llenarSelect('entrada-empresa-externo-select', empresasExternas, 'Nombre');
+    llenarSelect('salida-empresa-externo-select', empresasExternas, 'Nombre');
+  }
+
+  function llenarSelect(idSelect, opciones, propiedadValor) {
+    const select = document.getElementById(idSelect);
+    const valorPrevio = select.value;
+    limpiarOpciones(select);
+
+    (opciones || []).forEach(function (opcion) {
+      const item = document.createElement('option');
+      item.value = opcion[propiedadValor];
+      item.textContent = opcion[propiedadValor];
+      select.appendChild(item);
+    });
+
+    restaurarValorSiExiste(select, valorPrevio);
+  }
+
+  function limpiarOpciones(select) {
+    // Conserva únicamente la primera opción (el placeholder deshabilitado).
+    while (select.options.length > 1) {
+      select.remove(1);
+    }
+  }
+
+  function restaurarValorSiExiste(select, valor) {
+    if (!valor) return;
+    const existe = Array.prototype.some.call(select.options, function (opcion) { return opcion.value === valor; });
+    if (existe) select.value = valor;
+  }
+
+  // ==========================================================================
+  // NÚMERO DE VALE (prefijo de la obra + consecutivo)
+  // ==========================================================================
+  // El vale ya no depende del checador: sale de la OBRA que se elija en el
+  // registro. Cada obra tiene su prefijo (ej. "PN") y su propio
+  // consecutivo, así que quedan PN0001, PN0002... sin cruzarse entre obras.
+  // ==========================================================================
+
+  const DIGITOS_VALE = 4;
+
+  function manejarCambioChecador() {
+    estado.checadorSeleccionado = document.getElementById('checador').value.trim();
+  }
+
+  /**
+   * Obras que puede capturar el checador escrito.
+   * Si no tiene obras asignadas (columna Obra vacía) o todavía no se ha
+   * escrito un nombre reconocido, se ofrecen todas.
+   */
+  function _obrasDelChecador() {
+    const todas = (estado.catalogos.obras || []).map(function (o) { return o.Nombre; });
+    const nombre = document.getElementById('checador').value.trim();
+    if (!nombre) return todas;
+
+    const checador = (estado.catalogos.checadores || []).find(function (ch) { return _mismoTextoCliente(ch.Nombre, nombre); });
+    if (!checador) return todas;
+
+    const asignadas = String(checador.Obra || '').trim();
+    if (!asignadas) return todas;
+
+    const permitidas = asignadas.split(/[,;\n]/).map(function (o) { return o.trim(); }).filter(Boolean);
+    // Se devuelven con el nombre tal como está en el catálogo Obras, no
+    // como se escribió en Checadores: así el prefijo del vale se resuelve
+    // aunque en una hoja esté con distinta capitalización.
+    const resultado = todas.filter(function (o) {
+      return permitidas.some(function (p) { return _mismoTextoCliente(p, o); });
+    });
+    return resultado.length > 0 ? resultado : todas;
+  }
+
+  /**
+   * Al elegir el checador se ajustan sus obras. Si solo tiene una, se pone
+   * sola: para quien siempre trabaja en el mismo lugar, escribirla cada
+   * vez es fricción pura.
+   */
+  function manejarCambioChecadorConObras() {
+    manejarCambioChecador();
+
+    const campoObra = document.getElementById('obra');
+    const disponibles = _obrasDelChecador();
+    const nota = document.getElementById('obra-restriccion-checador');
+
+    // Si la obra que ya estaba escrita no es de este checador, se limpia.
+    if (campoObra.value.trim() && !disponibles.some(function (o) { return _mismoTextoCliente(o, campoObra.value); })) {
+      campoObra.value = '';
+      estado.obraSeleccionada = '';
+    }
+
+    const totalObras = (estado.catalogos.obras || []).length;
+    if (disponibles.length === 1) {
+      campoObra.value = disponibles[0];
+      manejarCambioObra();
+      if (nota) nota.textContent = 'Asignado a ' + disponibles[0];
+    } else if (nota) {
+      nota.textContent = (disponibles.length < totalObras)
+        ? 'Tus obras: ' + disponibles.join(', ')
+        : '';
+    }
+  }
+
+  function manejarCambioObra() {
+    estado.obraSeleccionada = document.getElementById('obra').value.trim();
+    refrescarListasPorObra();
+    aplicarAutorrellenoDeObra();
+    actualizarNumeroVale();
+  }
+
+  /**
+   * La obra elegida arriba se copia al campo correspondiente del flujo:
+   * en ENTRADA el material llega A la obra (Destino) y en SALIDA sale DE
+   * la obra (Origen). Ambos quedan editables por si hay una excepción.
+   */
+  function aplicarAutorrellenoDeObra() {
+    if (!estado.obraSeleccionada) return;
+
+    if (estado.tipoMovimiento === 'ENTRADA') {
+      document.getElementById('entrada-destino').value = estado.obraSeleccionada;
+      _marcarAyudaUbicacion('entrada-destino-ayuda', 'Tomado de la obra seleccionada arriba');
+    } else if (estado.tipoMovimiento === 'SALIDA') {
+      document.getElementById('salida-origen').value = estado.obraSeleccionada;
+      _marcarAyudaUbicacion('salida-origen-ayuda', 'Tomado de la obra seleccionada arriba');
+      // El origen acaba de cambiar sin pasar por el autocompletado, así que
+      // los materiales deben recalcularse aquí.
+      filtrarMaterialesPorOrigen('salida');
+    }
+  }
+
+  function _marcarAyudaUbicacion(idAyuda, texto) {
+    const ayuda = document.getElementById(idAyuda);
+    if (ayuda) ayuda.textContent = texto;
+  }
+
+  function _formatearVale(prefijo, numero, digitos) {
+    const ancho = digitos || DIGITOS_VALE;
+    var texto = String(numero);
+    while (texto.length < ancho) texto = '0' + texto;
+    return String(prefijo).toUpperCase() + texto;
+  }
+
+  function _descomponerVale(vale) {
+    const coincidencia = /^([A-Za-z]+)(\d+)$/.exec(String(vale || '').trim());
+    if (!coincidencia) return null;
+    return { prefijo: coincidencia[1].toUpperCase(), numero: parseInt(coincidencia[2], 10) };
+  }
+
+  function actualizarNumeroVale(silencioso) {
+    const elementoVale = document.getElementById('numero-vale');
+
+    // En un cierre de ciclo el vale no se genera: lo escribe el checador,
+    // porque tiene que coincidir con el de la salida que está cerrando.
+    if (estado.cicloCompleto && estado.tipoMovimiento === 'ENTRADA') {
+      estado.numeroVale = document.getElementById('cierre-vale').value.trim().toUpperCase();
+      elementoVale.textContent = estado.numeroVale || 'Escríbelo';
+      return;
+    }
+
+    if (!estado.obraSeleccionada) {
+      estado.numeroVale = null;
+      elementoVale.textContent = 'Elige la obra';
+      return;
+    }
+
+    if (estado.catalogos && !_obraExisteEnCatalogo(estado.obraSeleccionada)) {
+      estado.numeroVale = null;
+      elementoVale.textContent = 'Obra desconocida';
+      if (!silencioso) mostrarToast('La obra "' + estado.obraSeleccionada + '" no está en el catálogo.', 'error');
+      return;
+    }
+
+    // Sin prefijo no hay vale posible. Se detecta aquí, con el catálogo ya
+    // descargado, para avisar de inmediato en vez de esperar al servidor.
+    if (estado.catalogos && !_prefijoDeObraLocal(estado.obraSeleccionada)) {
+      estado.numeroVale = null;
+      elementoVale.textContent = 'Falta prefijo';
+      if (!silencioso) {
+        mostrarToast('La obra "' + estado.obraSeleccionada + '" no tiene Prefijo (ej. "PN") en el catálogo Obras. Agrégalo desde el panel administrativo.', 'error');
+      }
+      return;
+    }
+
+    elementoVale.textContent = 'Calculando…';
+
+    if (navigator.onLine) {
+      google.script.run
+        .withSuccessHandler(onInfoValeRecibida)
+        .withFailureHandler(function () { calcularValeConCache(); })
+        .obtenerInfoValeObra(estado.obraSeleccionada, estado.sesion ? estado.sesion.token : null);
+    } else {
+      calcularValeConCache();
+    }
+  }
+
+  function _obraExisteEnCatalogo(nombre) {
+    return (estado.catalogos.obras || []).some(function (o) { return _mismoTextoCliente(o.Nombre, nombre); });
+  }
+
+  function _prefijoDeObraLocal(nombreObra) {
+    const obra = (estado.catalogos.obras || []).find(function (o) { return _mismoTextoCliente(o.Nombre, nombreObra); });
+    return obra ? String(obra.Prefijo || '').trim().toUpperCase() : '';
+  }
+
+  function onInfoValeRecibida(respuesta) {
+    if (!respuesta.exito) {
+      // El servidor rechazó el cálculo (normalmente falta el Prefijo de la
+      // obra). Se intenta con lo que haya en el celular antes de rendirse.
+      estado.numeroVale = null;
+      mostrarToast(respuesta.error, 'error');
+      calcularValeConCache();
+      return;
+    }
+
+    guardarEnAlmacen('valesConocidos', {
+      checador: respuesta.obra, // el almacén usa esta clave desde la Fase 7
+      obra: respuesta.obra,
+      prefijo: respuesta.prefijo,
+      numerosUsados: respuesta.numerosUsados || [],
+      digitos: respuesta.digitos,
+      actualizado: new Date().getTime()
+    }).catch(function () { /* no crítico */ });
+
+    calcularYMostrarSiguienteVale(respuesta.obra, respuesta.prefijo, respuesta.numerosUsados || [], respuesta.digitos);
+  }
+
+  function calcularValeConCache() {
+    const elementoVale = document.getElementById('numero-vale');
+    const prefijoLocal = _prefijoDeObraLocal(estado.obraSeleccionada);
+
+    if (!prefijoLocal) {
+      elementoVale.textContent = '—';
+      estado.numeroVale = null;
+      mostrarToast('Sin conexión y sin el prefijo de esta obra guardado en el celular. Conéctate una vez antes de trabajar offline.', 'error');
+      return;
+    }
+
+    obtenerDeAlmacen('valesConocidos', estado.obraSeleccionada)
+      .then(function (cache) {
+        calcularYMostrarSiguienteVale(estado.obraSeleccionada, prefijoLocal, (cache && cache.numerosUsados) || [], cache && cache.digitos);
+      })
+      .catch(function () {
+        calcularYMostrarSiguienteVale(estado.obraSeleccionada, prefijoLocal, []);
+      });
+  }
+
+  /**
+   * Combina los números que el servidor sabe que ya se usaron con los que
+   * siguen en la cola local sin sincronizar, y toma el siguiente libre.
+   * Así dos viajes seguidos en la misma obra, aun sin señal, nunca
+   * comparten número.
+   */
+  function calcularYMostrarSiguienteVale(nombreObra, prefijo, numerosUsados, digitos) {
+    const elementoVale = document.getElementById('numero-vale');
+
+    obtenerTodoDeAlmacen('registrosPendientes')
+      .then(function (pendientes) {
+        const localesDeEstaObra = pendientes
+          .filter(function (r) { return _mismoTextoCliente(r.obra, nombreObra); })
+          .map(function (r) {
+            const partes = _descomponerVale(r.numeroVale);
+            return partes ? partes.numero : 0;
+          });
+        mostrarSiguiente(numerosUsados.concat(localesDeEstaObra));
+      })
+      .catch(function () { mostrarSiguiente(numerosUsados); });
+
+    function mostrarSiguiente(usados) {
+      // Se toma el MAYOR usado + 1, no el primer hueco libre.
+      //
+      // Buscar huecos parecía más ordenado, pero es incorrecto en la
+      // práctica: si la numeración de una obra no empieza en 1 (porque
+      // venía de vales en papel, o se importó a medias), todos los números
+      // anteriores se ven como "libres" y el sistema se mete a rellenarlos,
+      // chocando con vales que sí existen. Además, un vale que se anula y
+      // se borra dejaría un hueco que se reasignaría a otro viaje — dos
+      // papeles distintos con el mismo folio.
+      var mayor = 0;
+      for (var i = 0; i < usados.length; i++) {
+        const n = Number(usados[i]);
+        if (!isNaN(n) && n > mayor) mayor = n;
+      }
+
+      estado.numeroVale = _formatearVale(prefijo, mayor + 1, digitos);
+      elementoVale.textContent = estado.numeroVale;
+    }
+  }
+
+  // ==========================================================================
+  // MATERIALES SEGÚN EL BANCO DE ORIGEN
+  // ==========================================================================
+  // Cada banco declara en su catálogo qué materiales salen de él. Si la
+  // celda está vacía se muestran todos: es preferible mostrar de más que
+  // dejar al checador sin poder capturar por un catálogo incompleto.
+  // ==========================================================================
+  /**
+   * Ajusta la lista de materiales según el ORIGEN del movimiento.
+   *
+   * Aplica a los dos flujos, no solo a Entrada: hay lugares que son obra y
+   * banco a la vez (la planta de asfalto recibe material y también surte),
+   * así que una SALIDA desde ahí debe ofrecer los materiales de ese banco,
+   * no el catálogo completo.
+   *
+   * Si el origen no es un banco (es una obra normal) o el banco no declara
+   * materiales, se muestran todos: es preferible mostrar de más que dejar
+   * al checador sin poder capturar.
+   */
+  function filtrarMaterialesPorOrigen(flujo) {
+    const idOrigen = flujo + '-origen';
+    const idMaterial = flujo + '-material';
+
+    const nombreOrigen = document.getElementById(idOrigen).value;
+    const banco = (estado.catalogos.bancos || []).find(function (b) { return _mismoTextoCliente(b.Nombre, nombreOrigen); });
+    const declarados = banco ? String(banco.Materiales || '').trim() : '';
+
+    if (!declarados) {
+      llenarSelect(idMaterial, estado.catalogos.materiales || [], 'Nombre');
+      return;
+    }
+
+    // Los nombres declarados en el banco se usan TAL CUAL como opciones, en
+    // vez de cruzarlos contra el catálogo Materiales: bastaba una diferencia
+    // mínima de redacción entre las dos hojas para perder materiales de la
+    // lista sin ningún aviso. Se admite coma, punto y coma o salto de línea.
+    const opciones = declarados
+      .split(/[,\n;]/)
+      .map(function (m) { return m.trim(); })
+      .filter(Boolean)
+      .map(function (m) { return { Nombre: m }; });
+
+    llenarSelect(idMaterial, opciones, 'Nombre');
+  }
+
+  // ==========================================================================
+  // CICLO COMPLETO
+  // ==========================================================================
+  // En SALIDA: se marca la salida como parte de un ciclo; el vale se genera
+  // normal y queda "abierto" esperando el regreso.
+  // En ENTRADA: es el cierre de ese ciclo. El formulario se simplifica —
+  // solo vale (escrito a mano) y volumen— porque el resto de los datos ya
+  // quedaron registrados en la salida.
+  // ==========================================================================
+  /**
+   * Comprueba contra el servidor que el vale escrito corresponda a una
+   * salida de ciclo abierta, y muestra el detalle de ese viaje para que el
+   * checador confirme que es el correcto.
+   *
+   * Se hace aquí, y no solo al guardar, porque si el registro se captura
+   * sin señal el rechazo llegaría horas después — cuando el camión ya se
+   * fue y el dato ya no se puede corregir.
+   */
+  function verificarValeDeCierre() {
+    const campo = document.getElementById('cierre-vale');
+    const ayuda = document.getElementById('cierre-vale-ayuda');
+    const vale = campo.value.trim().toUpperCase();
+
+    estado.cierreValidado = false;
+
+    if (!vale) {
+      ayuda.textContent = 'Escríbelo tal como aparece en el vale de salida';
+      ayuda.dataset.estado = '';
+      return;
+    }
+
+    if (!navigator.onLine) {
+      ayuda.textContent = 'Sin conexión: no se puede verificar ahora. Revisa bien el número.';
+      ayuda.dataset.estado = 'aviso';
+      return;
+    }
+
+    ayuda.textContent = 'Verificando…';
+    ayuda.dataset.estado = '';
+
+    google.script.run
+      .withSuccessHandler(function (respuesta) {
+        if (!respuesta.exito) {
+          ayuda.textContent = respuesta.error;
+          ayuda.dataset.estado = 'error';
+          return;
+        }
+        const s = respuesta.salida;
+        estado.cierreValidado = true;
+        ayuda.dataset.estado = 'ok';
+        // Se muestra de dónde salió y a dónde iba: es lo que permite
+        // confirmar de un vistazo que es el viaje que se está cerrando.
+        ayuda.textContent = 'Salida encontrada: ' + s.fecha + ' ' + s.hora +
+          (s.material ? ' · ' + s.material : '') +
+          (s.camion ? ' · ' + s.camion : '') +
+          ((s.origen || s.destino) ? ' · ' + (s.origen || '?') + ' → ' + (s.destino || '?') : '');
+      })
+      .withFailureHandler(function (err) {
+        ayuda.textContent = 'No se pudo verificar: ' + err.message;
+        ayuda.dataset.estado = 'aviso';
+      })
+      .verificarValeCiclo(vale, estado.sesion ? estado.sesion.token : null);
+  }
+
+  function manejarCambioCicloCompleto() {
+    estado.cicloCompleto = document.getElementById('ciclo-completo').checked;
+    aplicarVistaSegunTipoYCiclo();
+    actualizarNumeroVale();
+  }
+
+  function aplicarVistaSegunTipoYCiclo() {
+    const esCierre = estado.cicloCompleto && estado.tipoMovimiento === 'ENTRADA';
+    const ayuda = document.getElementById('ciclo-ayuda');
+
+    document.getElementById('seccion-cierre-ciclo').classList.toggle('oculto', !esCierre);
+    document.getElementById('seccion-entrada').classList.toggle('oculto', estado.tipoMovimiento !== 'ENTRADA' || esCierre);
+    document.getElementById('seccion-salida').classList.toggle('oculto', estado.tipoMovimiento !== 'SALIDA');
+
+    if (!estado.tipoMovimiento) {
+      ayuda.classList.add('oculto');
+      return;
+    }
+
+    ayuda.classList.remove('oculto');
+    if (esCierre) {
+      ayuda.textContent = 'Cierre: escribe el vale de la salida que estás cerrando.';
+    } else if (estado.cicloCompleto) {
+      ayuda.textContent = 'Queda abierto hasta que se registre la entrada en el destino.';
+    } else {
+      ayuda.textContent = 'Márcalo solo si el camión va a regresar con el mismo vale.';
+    }
+  }
+
+
+  // ==========================================================================
+  // AUTOCOMPLETADO DE TEXTO (genérico, reutilizable)
+  // Convierte un <input type="text"> en un campo con sugerencias filtradas
+  // mientras se escribe — sigue siendo texto libre, nunca obliga a elegir
+  // de la lista. Se usa para: Checador, y los campos de Obra/Destino que
+  // antes eran <select> (necesario porque hay obras sin coordenadas GPS,
+  // que de otra forma solo se podrían elegir de una lista larga sin buscar).
+  // ==========================================================================
+  function configurarAutocompleteTexto(idInput, idLista, obtenerOpciones, eventos) {
+    eventos = eventos || {};
+    const input = document.getElementById(idInput);
+    const lista = document.getElementById(idLista);
+    let eligiendoDeLista = false;
+
+    input.addEventListener('input', function () {
+      if (eventos.alEscribir) eventos.alEscribir(input.value);
+
+      const termino = input.value.trim().toLowerCase();
+      lista.innerHTML = '';
+
+      if (!termino || !estado.catalogos) { lista.classList.add('oculto'); return; }
+
+      const coincidencias = obtenerOpciones()
+        .filter(function (texto) { return texto.toLowerCase().indexOf(termino) !== -1; })
+        .slice(0, 8);
+
+      if (coincidencias.length === 0) { lista.classList.add('oculto'); return; }
+
+      coincidencias.forEach(function (texto) {
+        const li = document.createElement('li');
+        li.textContent = texto;
+
+        // Se usa 'mousedown' en vez de 'click' porque mousedown ocurre ANTES
+        // que el blur del input. Con 'click', el blur se disparaba primero y
+        // validaba el texto parcial que llevaba escrito ("ada"), mostrando un
+        // error de "no está en el catálogo" justo antes de aplicar el nombre
+        // completo que el usuario acababa de elegir.
+        li.addEventListener('mousedown', function (evento) {
+          evento.preventDefault(); // evita que el input pierda el foco aquí
+          eligiendoDeLista = true;
+          input.value = texto;
+          lista.classList.add('oculto');
+          if (eventos.alElegir) eventos.alElegir(texto);
+          eligiendoDeLista = false;
+        });
+
+        lista.appendChild(li);
+      });
+      lista.classList.remove('oculto');
+    });
+
+    input.addEventListener('blur', function () {
+      // Se pospone un instante: si el usuario está eligiendo de la lista,
+      // para cuando esto corra el valor ya será el nombre completo.
+      setTimeout(function () {
+        lista.classList.add('oculto');
+        if (!eligiendoDeLista && eventos.alTerminar) eventos.alTerminar();
+      }, 180);
+    });
+  }
+
+  function configurarAutocompleteChecador() {
+    // El checador ya no se escribe: lo pone la sesión. Aplicar SUS obras
+    // (lo que antes hacía el autocompletado al elegir un nombre) no se puede
+    // hacer aquí: esta función corre antes de que lleguen los catálogos.
+    // Se hace en poblarSelects, que corre cuando ya están cargados.
+
+    // Solo se sugieren las obras donde ese checador puede capturar. Es lo
+    // que permite que a la gente que no es de la empresa le aparezca
+    // únicamente la obra donde está, en vez de todas.
+    configurarAutocompleteTexto('obra', 'obra-resultados',
+      _obrasDelChecador,
+      { alElegir: manejarCambioObra, alTerminar: manejarCambioObra }
+    );
+  }
+
+  // Campos de Obra/Destino: se llenan solos por GPS cuando hay coordenadas
+  // (iniciarDeteccionUbicacion, Fase 6 — sigue funcionando igual, ya que
+  // .value se comporta igual en un <input> que en un <select>), pero como
+  // hay obras sin coordenadas, también admiten escribir y elegir de una
+  // lista filtrada — exactamente igual que el Checador.
+  function configurarAutocompleteUbicaciones() {
+    // Nota: alElegir recibe el texto elegido como argumento, así que se
+    // envuelve en una función sin parámetros — de lo contrario ese texto
+    // caería en el parámetro "silencioso" de actualizarNumeroVale y
+    // silenciaría los avisos sin querer.
+    const recalcularVale = function () { actualizarNumeroVale(); };
+
+    configurarAutocompleteTexto('entrada-destino', 'entrada-destino-resultados',
+      function () { return (estado.catalogos.obras || []).map(function (o) { return o.Nombre; }); },
+      {
+        alElegir: recalcularVale,
+        alTerminar: recalcularVale
+      }
+    );
+
+    const alCambiarOrigenSalida = function () {
+      recalcularVale();
+      filtrarMaterialesPorOrigen('salida');
+      refrescarEmpresasDisponibles();
+    };
+
+    configurarAutocompleteTexto('salida-origen', 'salida-origen-resultados',
+      _opcionesUbicaciones,
+      {
+        alElegir: alCambiarOrigenSalida,
+        alTerminar: alCambiarOrigenSalida
+      }
+    );
+
+    // salida-destino nunca se detecta por GPS (es siempre manual, desde el
+    // planteamiento original) y no participa en el cálculo del vale, pero
+    // sí en qué fleteras están disponibles.
+    const alCambiarDestinoSalida = function () {
+      _revisarDestinoLibre();
+      refrescarEmpresasDisponibles();
+    };
+    configurarAutocompleteTexto('salida-destino', 'salida-destino-resultados', _opcionesUbicaciones,
+      { alEscribir: alCambiarDestinoSalida, alElegir: alCambiarDestinoSalida, alTerminar: alCambiarDestinoSalida }
+    );
+  }
+
+
+  /**
+   * Lista combinada de Obras y Bancos para los campos de ubicación.
+   * Se DEDUPLICA a propósito: hay lugares que existen en ambos catálogos
+   * (la planta de asfalto es obra y banco a la vez, porque recibe material
+   * y también surte a las obras). Sin esto aparecería dos veces en las
+   * sugerencias y parecería un error de captura.
+   */
+  /**
+   * Bancos que siguen operando. Los marcados como Inactivo se conservan en
+   * el catálogo (para no perder el historial de los registros que ya los
+   * usaron) pero dejan de ofrecerse al capturar.
+   * Si la columna Estado está vacía se considera Activo: así, agregar la
+   * columna no deja de golpe todos los bancos fuera de las listas.
+   */
+  /**
+   * Los lugares involucrados en el registro actual: la obra donde se
+   * captura, más el origen y el destino del movimiento.
+   *
+   * Importa para las fleteras: una empresa puede estar asignada a la obra
+   * de DESTINO y no a aquella donde se está capturando (un flete de Planta
+   * Nalo a Tiger lo puede hacer una fletera de Tiger). Filtrar solo por la
+   * obra del registro la dejaría fuera sin razón.
+   */
+  function _obrasRelevantes() {
+    const flujo = estado.tipoMovimiento === 'ENTRADA' ? 'entrada' : 'salida';
+    const origen = document.getElementById(flujo + '-origen');
+    const destino = document.getElementById(flujo + '-destino');
+
+    return [
+      estado.obraSeleccionada,
+      origen ? origen.value.trim() : '',
+      destino ? destino.value.trim() : ''
+    ].filter(Boolean);
+  }
+
+  /** Empresas y fleteras que operan en alguno de los lugares del registro. */
+  function _empresasDeLaObra() {
+    const lugares = _obrasRelevantes();
+
+    return (estado.catalogos.empresas || []).filter(function (e) {
+      const asignadas = String(e.Obra || '').trim();
+      if (!asignadas) return true;              // sin obras = trabaja en todas
+      if (lugares.length === 0) return true;    // todavía no hay dónde comparar
+
+      return lugares.some(function (lugar) { return _aplicaEnObra(e, lugar); });
+    });
+  }
+
+  /**
+   * Vuelve a armar las listas que dependen de la obra. Se llama cada vez
+   * que la obra cambia, porque el checador y las fleteras disponibles
+   * cambian con ella.
+   */
+  /**
+   * Rearma las listas de fleteras. Se llama cada vez que cambia la obra,
+   * el origen o el destino, porque las tres influyen en qué empresas
+   * pueden dar ese servicio.
+   */
+  function refrescarEmpresasDisponibles() {
+    if (!estado.catalogos) return;
+    const empresasExternas = _empresasDeLaObra().filter(function (e) { return _mismoTextoCliente(e.Tipo, 'Externo'); });
+    // llenarSelect conserva la empresa ya elegida si sigue estando en la
+    // lista, así que cambiar el destino no borra lo que ya se capturó.
+    llenarSelect('entrada-empresa-externo-select', empresasExternas, 'Nombre');
+    llenarSelect('salida-empresa-externo-select', empresasExternas, 'Nombre');
+  }
+
+  function refrescarListasPorObra() {
+    if (!estado.catalogos) return;
+
+    refrescarEmpresasDisponibles();
+
+    // Si el checador escrito ya no aplica en la obra nueva, se avisa en
+    // vez de dejarlo puesto y que el registro falle más adelante.
+    const nombreChecador = document.getElementById('checador').value.trim();
+    if (nombreChecador && estado.obraSeleccionada && !_checadorAplicaEnObra(nombreChecador)) {
+      mostrarToast('El checador "' + nombreChecador + '" no está asignado a ' + estado.obraSeleccionada + '.', 'error');
+    }
+  }
+
+  function _checadorAplicaEnObra(nombre) {
+    const checador = (estado.catalogos.checadores || []).find(function (ch) { return _mismoTextoCliente(ch.Nombre, nombre); });
+    return checador ? _aplicaEnObra(checador, estado.obraSeleccionada) : false;
+  }
+
+  function _bancosActivos() {
+    return (estado.catalogos.bancos || []).filter(function (b) {
+      const estadoBanco = String(b.Estado || '').trim();
+      return !estadoBanco || !_mismoTextoCliente(estadoBanco, 'Inactivo');
+    });
+  }
+
+  function _opcionesUbicaciones() {
+    const obras = (estado.catalogos.obras || []).map(function (o) { return o.Nombre; });
+    const bancos = _bancosActivos().map(function (b) { return b.Nombre; });
+
+    const vistos = {};
+    return obras.concat(bancos).filter(function (nombre) {
+      const clave = String(nombre).trim().toLowerCase();
+      if (!clave || vistos[clave]) return false;
+      vistos[clave] = true;
+      return true;
+    });
+  }
+
+  /**
+   * Avisa cuando el destino escrito no está en ningún catálogo. No es un
+   * error —así se capturan los clientes ocasionales que no vale la pena
+   * dar de alta— pero conviene que se vea, para que un dedazo no pase
+   * inadvertido y termine como un destino nuevo en los reportes.
+   */
+  function _revisarDestinoLibre() {
+    const valor = document.getElementById('salida-destino').value.trim();
+    const ayuda = document.getElementById('salida-destino-ayuda');
+    if (!ayuda) return;
+
+    if (!valor) {
+      ayuda.textContent = 'Si es un cliente ocasional, escribe su nombre directamente';
+      return;
+    }
+
+    const enCatalogo = _opcionesUbicaciones().some(function (n) { return _mismoTextoCliente(n, valor); });
+    ayuda.textContent = enCatalogo
+      ? 'Destino de catálogo'
+      : 'Destino externo: se guardará tal como lo escribiste';
+  }
+
+
+  // ==========================================================================
+  // TIPO DE MOVIMIENTO (ENTRADA / SALIDA)
+  // ==========================================================================
+  function seleccionarTipoMovimiento(tipo) {
+    estado.tipoMovimiento = tipo;
+    document.getElementById('btn-entrada').setAttribute('aria-pressed', String(tipo === 'ENTRADA'));
+    document.getElementById('btn-salida').setAttribute('aria-pressed', String(tipo === 'SALIDA'));
+    document.getElementById('seccion-comun').classList.remove('oculto');
+
+    aplicarVistaSegunTipoYCiclo();
+    aplicarAutorrellenoDeObra();
+    actualizarNumeroVale(true);
+
+    // El GPS solo aporta en un viaje normal: en un cierre de ciclo no se
+    // captura ubicación porque no se está registrando un traslado nuevo.
+    if (!(estado.cicloCompleto && tipo === 'ENTRADA')) {
+      iniciarDeteccionUbicacion();
+    }
+  }
+
+  // ==========================================================================
+  // TIPO DE EMPRESA (Interno / Externo) → determina si se pide camión
+  // ==========================================================================
+  function seleccionarTipoEmpresa(flujo, tipo) {
+    document.querySelectorAll('[data-flujo="' + flujo + '"][data-tipo-empresa]').forEach(function (btn) {
+      btn.setAttribute('aria-pressed', btn.dataset.tipoEmpresa === tipo ? 'true' : 'false');
+    });
+
+    estado.tipoEmpresa[flujo] = tipo;
+    if (flujo === 'salida') actualizarAvisoMaquina();
+
+    // Cambiar de tipo de empresa limpia cualquier camión ya seleccionado.
+    estado.camionSeleccionado[flujo] = null;
+    document.getElementById(flujo + '-info-camion').classList.add('oculto');
+
+    _actualizarEtiquetaMaquina(tipo);
+
+    if (tipo === 'Interno') {
+      document.getElementById(flujo + '-empresa-externo-bloque').classList.add('oculto');
+      document.getElementById(flujo + '-empresa-interno-info').classList.remove('oculto');
+
+      const empresaInterna = (estado.catalogos.empresas || []).find(function (e) { return _mismoTextoCliente(e.Tipo, 'Interno'); });
+      const campoEmpresa = document.getElementById(flujo + '-empresa');
+      const etiquetaInterna = document.getElementById(flujo + '-empresa-interno-nombre');
+
+      if (empresaInterna) {
+        campoEmpresa.value = empresaInterna.Nombre;
+        etiquetaInterna.textContent = empresaInterna.Nombre;
+        // Los botones se dibujan aquí (no al cargar la página) para que
+        // siempre reflejen el catálogo más reciente, incluso si se
+        // refrescó en segundo plano mientras la app estaba abierta.
+        dibujarBotonesCamion(flujo, empresaInterna.Nombre);
+        filtrarConductoresPorEmpresa(flujo);
+        document.getElementById(flujo + '-bloque-camion').classList.remove('oculto');
+      } else {
+        campoEmpresa.value = '';
+        etiquetaInterna.textContent = 'No hay ninguna empresa marcada como Interno';
+        document.getElementById(flujo + '-bloque-camion').classList.add('oculto');
+        mostrarToast('No hay ninguna empresa con Tipo = Interno en el catálogo Empresas.', 'error');
+      }
+    } else {
+      // Externo: basta con saber QUÉ empresa acarrea. No se pide el camión
+      // — son unidades de terceros que rotan constantemente y no están
+      // (ni tienen por qué estar) en el catálogo de Camiones.
+      document.getElementById(flujo + '-empresa-interno-info').classList.add('oculto');
+      document.getElementById(flujo + '-empresa-externo-bloque').classList.remove('oculto');
+      document.getElementById(flujo + '-bloque-camion').classList.add('oculto');
+      document.getElementById(flujo + '-empresa').value = ''; // se llena al elegir del select de abajo
+    }
+  }
+
+  /**
+   * Ajusta el texto del campo Máquina según el tipo de empresa: en interno
+   * es opcional y en externo obligatorio, y conviene que se vea antes de
+   * intentar guardar, no como un error después.
+   */
+  function actualizarAvisoMaquina() {
+    const etiqueta = document.getElementById('salida-maquina-etiqueta');
+    const ayuda = document.getElementById('salida-maquina-ayuda');
+    if (!etiqueta || !ayuda) return;
+
+    if (estado.tipoEmpresa.salida === 'Interno') {
+      etiqueta.textContent = '(opcional)';
+      ayuda.textContent = 'Llénalo solo cuando aplique';
+    } else {
+      etiqueta.textContent = '';
+      ayuda.textContent = 'Obligatorio para empresas externas';
+    }
+  }
+
+  /**
+   * En acarreo interno la máquina es opcional, así que la etiqueta lo dice
+   * — si el campo se ve igual en los dos casos, el checador no sabe si
+   * puede dejarlo vacío.
+   */
+  /**
+   * Limita la lista de conductores a los de la empresa o fletera elegida.
+   *
+   * La lista se arma de DOS fuentes, y por una razón:
+   *  1. El catálogo Conductores, por su columna Empresa.
+   *  2. Los conductores asignados a los camiones de esa empresa.
+   *
+   * La segunda es la que evita el caso molesto: si un camión trae asignado
+   * un conductor que en el catálogo quedó sin empresa o mal escrito, al
+   * seleccionar ese camión su conductor no aparecería en la lista y el
+   * campo quedaría vacío sin explicación.
+   *
+   * Si el filtro no deja a nadie, se muestran todos: es preferible mostrar
+   * de más que impedir la captura por un catálogo incompleto.
+   */
+  function filtrarConductoresPorEmpresa(flujo) {
+    const idSelect = flujo + '-conductor';
+    const nombreEmpresa = document.getElementById(flujo + '-empresa').value;
+    const todos = estado.catalogos.conductores || [];
+
+    if (!nombreEmpresa) {
+      llenarSelect(idSelect, todos, 'Nombre');
+      return;
+    }
+
+    const permitidos = {};
+
+    // 1. Por la columna Empresa del catálogo. Sin empresa = eventual, entra siempre.
+    todos.forEach(function (con) {
+      const suEmpresa = String(con.Empresa || '').trim();
+      if (!suEmpresa || _mismoTextoCliente(suEmpresa, nombreEmpresa)) {
+        permitidos[String(con.Nombre).trim()] = true;
+      }
+    });
+
+    // 2. Por los camiones de esa empresa.
+    (estado.catalogos.camiones || []).forEach(function (cam) {
+      if (_mismoTextoCliente(cam['Empresa'], nombreEmpresa) && cam['Conductor']) {
+        permitidos[String(cam['Conductor']).trim()] = true;
+      }
+    });
+
+    const lista = Object.keys(permitidos).sort().map(function (n) { return { Nombre: n }; });
+    llenarSelect(idSelect, lista.length > 0 ? lista : todos, 'Nombre');
+  }
+
+  function _actualizarEtiquetaMaquina(tipoEmpresa) {
+    const etiqueta = document.getElementById('salida-maquina-etiqueta');
+    const ayuda = document.getElementById('salida-maquina-ayuda');
+    if (!etiqueta || !ayuda) return;
+
+    if (tipoEmpresa === 'Interno') {
+      etiqueta.textContent = '(opcional)';
+      ayuda.textContent = 'Llénalo solo cuando aplique.';
+    } else {
+      etiqueta.textContent = '';
+      ayuda.textContent = 'Indica la máquina que cargó el camión.';
+    }
+  }
+
+  function manejarCambioEmpresaExterna(flujo) {
+    const nombreEmpresa = document.getElementById(flujo + '-empresa-externo-select').value;
+    document.getElementById(flujo + '-empresa').value = nombreEmpresa;
+
+    // Al cambiar de empresa se descarta el camión que estuviera elegido:
+    // pertenecía a la empresa anterior.
+    estado.camionSeleccionado[flujo] = null;
+    document.getElementById(flujo + '-info-camion').classList.add('oculto');
+
+    if (!nombreEmpresa) {
+      document.getElementById(flujo + '-bloque-camion').classList.add('oculto');
+      filtrarConductoresPorEmpresa(flujo);
+      return;
+    }
+
+    dibujarBotonesCamion(flujo, nombreEmpresa);
+    filtrarConductoresPorEmpresa(flujo);
+    document.getElementById(flujo + '-bloque-camion').classList.remove('oculto');
+  }
+
+  // ==========================================================================
+  // SELECCIÓN DE CAMIÓN (flujo Interno)
+  // ==========================================================================
+  // Los camiones internos se muestran como botones grandes, uno por unidad.
+  // Se descartó el escaneo de QR: Apps Script sirve la app dentro de un
+  // iframe sandbox que bloquea la cámara en vivo, y la única alternativa
+  // disponible (decodificar una foto fija) resultaba poco confiable con las
+  // condiciones reales de campo — polvo, sol directo, poca luz al amanecer
+  // y calcomanías desgastadas. Tocar un botón es más rápido y no falla.
+  //
+  // Los datos salen del catálogo YA descargado (estado.catalogos.camiones),
+  // así que funciona sin conexión y sin esperar al servidor.
+  // ==========================================================================
+
+  // Con pocas unidades, los botones son lo más rápido: se ve todo de un
+  // golpe y se toca una vez. Pasando de cierto número dejan de caber en la
+  // pantalla y hay que desplazarse para encontrar el camión — ahí una lista
+  // desplegable, que además permite escribir para buscar, es mejor.
+  const MAX_CAMIONES_COMO_BOTONES = 8;
+
+  function dibujarBotonesCamion(flujo, nombreEmpresa) {
+    const contenedor = document.getElementById(flujo + '-botones-camion');
+    const select = document.getElementById(flujo + '-select-camion');
+    contenedor.innerHTML = '';
+
+    const camiones = (estado.catalogos.camiones || []).filter(function (cam) {
+      return _mismoTextoCliente(cam['Empresa'], nombreEmpresa);
+    });
+
+    if (camiones.length === 0) {
+      contenedor.classList.remove('oculto');
+      select.classList.add('oculto');
+      contenedor.innerHTML = '<p class="ayuda">No hay camiones registrados para "' + nombreEmpresa + '". Agrégalos desde el panel administrativo.</p>';
+      return;
+    }
+
+    if (camiones.length > MAX_CAMIONES_COMO_BOTONES) {
+      _dibujarSelectCamion(flujo, camiones);
+      return;
+    }
+
+    contenedor.classList.remove('oculto');
+    select.classList.add('oculto');
+
+    camiones.forEach(function (camion) {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'btn-camion';
+      boton.setAttribute('aria-pressed', 'false');
+      boton.dataset.idCamion = camion['ID del camión'];
+
+      const placa = camion['Placa'] ? '<span class="placa-mini">' + camion['Placa'] + '</span>' : '';
+      boton.innerHTML = camion['ID del camión'] + placa;
+
+      boton.addEventListener('click', function () { seleccionarCamionInterno(flujo, camion); });
+      contenedor.appendChild(boton);
+    });
+  }
+
+  function _dibujarSelectCamion(flujo, camiones) {
+    const contenedor = document.getElementById(flujo + '-botones-camion');
+    const select = document.getElementById(flujo + '-select-camion');
+
+    contenedor.classList.add('oculto');
+    select.classList.remove('oculto');
+
+    while (select.options.length > 1) select.remove(1);
+
+    camiones.forEach(function (camion) {
+      const opcion = document.createElement('option');
+      opcion.value = camion['ID del camión'];
+      opcion.textContent = camion['ID del camión'] + (camion['Placa'] ? ' — ' + camion['Placa'] : '');
+      select.appendChild(opcion);
+    });
+
+    select.value = '';
+    select.onchange = function () {
+      const elegido = camiones.find(function (cam) { return String(cam['ID del camión']) === select.value; });
+      if (elegido) seleccionarCamionInterno(flujo, elegido);
+    };
+  }
+
+
+  /**
+   * Marca el botón elegido y llena la tarjeta con los datos del camión:
+   * placa, conductor y capacidades salen del catálogo automáticamente.
+   */
+  function seleccionarCamionInterno(flujo, camion) {
+    estado.camionSeleccionado[flujo] = {
+      id: camion['ID del camión'],
+      placa: camion['Placa'] || '',
+      capacidadNominal: camion['Capacidad nominal'] || '',
+      capacidadCalculada: camion['Capacidad calculada'] || ''
+    };
+
+    // Solo un camión puede estar activo a la vez. Se marca en los dos
+    // formatos, porque cuál está a la vista depende de cuántos camiones
+    // tenga la empresa.
+    document.querySelectorAll('#' + flujo + '-botones-camion .btn-camion').forEach(function (boton) {
+      boton.setAttribute('aria-pressed', boton.dataset.idCamion === camion['ID del camión'] ? 'true' : 'false');
+    });
+    const selectCamion = document.getElementById(flujo + '-select-camion');
+    if (selectCamion) selectCamion.value = camion['ID del camión'];
+
+    const info = document.getElementById(flujo + '-info-camion');
+    info.classList.remove('oculto');
+    info.querySelectorAll('.detalle-interno').forEach(function (el) { el.classList.remove('oculto'); });
+
+    document.getElementById(flujo + '-camion-id').textContent = camion['ID del camión'];
+    document.getElementById(flujo + '-camion-placa').textContent = camion['Placa'] || '—';
+    document.getElementById(flujo + '-cap-nominal').textContent = camion['Capacidad nominal'] || '—';
+    document.getElementById(flujo + '-cap-calculada').textContent = camion['Capacidad calculada'] || '—';
+
+    // El conductor viene preseleccionado del catálogo, pero queda editable:
+    // en la práctica los conductores cambian de unidad seguido.
+    const selectConductor = document.getElementById(flujo + '-conductor');
+    if (camion['Conductor']) restaurarValorSiExiste(selectConductor, camion['Conductor']);
+  }
+
+  // ==========================================================================
+  // GEOLOCALIZACIÓN
+  // ==========================================================================
+  // El GPS detecta la OBRA en la que está parado el checador y la escribe
+  // en el campo Obra de arriba — que es del que sale el número de vale y
+  // el que se copia a Origen o Destino. Antes llenaba directamente el
+  // origen/destino, lo cual dejaba el campo Obra vacío y sin vale.
+  //
+  // Solo las Obras tienen coordenadas; los Bancos no. Si no hay ninguna
+  // obra dentro del radio configurado, se elige a mano.
+  // ==========================================================================
+  function iniciarDeteccionUbicacion() {
+    const ayuda = document.getElementById('obra-ayuda');
+
+    if (!navigator.geolocation) {
+      ayuda.textContent = 'Escribe la obra en la que estás haciendo el registro.';
+      return;
+    }
+
+    ayuda.textContent = 'Detectando ubicación…';
+
+    navigator.geolocation.getCurrentPosition(
+      onUbicacionObtenida,
+      function (err) {
+        ayuda.textContent = 'Sin ubicación. Escribe la obra en la que estás haciendo el registro.';
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  }
+
+  function onUbicacionObtenida(posicion) {
+    const lat = posicion.coords.latitude;
+    const lng = posicion.coords.longitude;
+    estado.ubicacionGPS = lat.toFixed(6) + ', ' + lng.toFixed(6);
+
+    const ayuda = document.getElementById('obra-ayuda');
+    const cercana = encontrarObraCercana(lat, lng);
+    const campoObra = document.getElementById('obra');
+
+    if (!cercana) {
+      ayuda.textContent = 'No se detectó obra cercana. Escribe la obra en la que estás haciendo el registro.';
+      return;
+    }
+
+    // Si el checador ya eligió una obra distinta a mano, no se le pisa:
+    // puede estar capturando desde fuera de la obra a propósito.
+    if (campoObra.value.trim() && !_mismoTextoCliente(campoObra.value, cercana.obra.Nombre)) {
+      ayuda.textContent = 'GPS: estás cerca de ' + cercana.obra.Nombre + ' (' + Math.round(cercana.distancia) + ' m), pero dejaste otra obra escrita.';
+      return;
+    }
+
+    // El GPS no puede saltarse la restricción del checador: detectar una
+    // obra donde no tiene permiso no debe llenarla.
+    const permitidas = _obrasDelChecador();
+    if (!permitidas.some(function (o) { return _mismoTextoCliente(o, cercana.obra.Nombre); })) {
+      ayuda.textContent = 'Estás en ' + cercana.obra.Nombre + ', pero no estás asignado a esa obra.';
+      return;
+    }
+
+    campoObra.value = cercana.obra.Nombre;
+    ayuda.textContent = 'Detectado por GPS: ' + cercana.obra.Nombre + ' (' + Math.round(cercana.distancia) + ' m)';
+    manejarCambioObra();
+  }
+
+  function encontrarObraCercana(lat, lng) {
+    var mejor = null;
+
+    (estado.catalogos.obras || []).forEach(function (obra) {
+      const latObra = Number(obra.Latitud);
+      const lngObra = Number(obra.Longitud);
+      if (isNaN(latObra) || isNaN(lngObra) || !obra.Latitud || !obra.Longitud) return;
+
+      const distancia = calcularDistanciaMetros(lat, lng, latObra, lngObra);
+      if (distancia <= estado.distanciaMaximaMetros && (!mejor || distancia < mejor.distancia)) {
+        mejor = { obra: obra, distancia: distancia };
+      }
+    });
+
+    return mejor;
+  }
+
+  function calcularDistanciaMetros(lat1, lng1, lat2, lng2) {
+    const radioTierra = 6371000; // metros
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLng = (lng2 - lng1) * rad;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return radioTierra * c;
+  }
+
+  // ==========================================================================
+  // CAPTURA DE FOTO DE EVIDENCIA
+  // ==========================================================================
+  // IMPORTANTE — por qué no hay cámara en vivo:
+  // Apps Script sirve esta app dentro de un iframe sandbox en el dominio
+  // googleusercontent.com, y ese iframe NO lleva el permiso allow="camera".
+  // Los navegadores bloquean getUserMedia() en ese contexto aunque el
+  // usuario acepte el permiso — no es algo que se pueda arreglar desde
+  // aquí. La única alternativa sería hostear la app fuera de Apps Script,
+  // lo cual contradice el planteamiento del proyecto.
+  //
+  // Solución: <input type="file" accept="image/*" capture="environment">.
+  // Esto abre la app de cámara NATIVA del celular (que sí tiene permiso) y
+  // devuelve la foto tomada.
+  // ==========================================================================
+
+  function abrirCamara() {
+    // Se limpia el valor antes de abrir para que, si el checador toma dos
+    // veces la MISMA foto seguida, el evento 'change' vuelva a dispararse.
+    const entrada = document.getElementById('entrada-camara-foto');
+    entrada.value = '';
+    entrada.click();
+  }
+
+  function manejarFotoSeleccionada(evento) {
+    const archivo = evento.target.files && evento.target.files[0];
+    if (!archivo) return;
+
+    _leerImagenRedimensionada(archivo, 1280, function (dataUrl) {
+      estado.fotoBase64 = dataUrl;
+      const vistaPrevia = document.getElementById('foto-vista-previa');
+      vistaPrevia.src = dataUrl;
+      vistaPrevia.classList.remove('oculto');
+      mostrarToast('Fotografía capturada.', 'exito');
+    }, function () {
+      mostrarToast('No se pudo procesar la fotografía. Intenta de nuevo.', 'error');
+    });
+  }
+
+  // Las fotos de un celular moderno pesan varios MB; guardarlas así en
+  // IndexedDB y luego mandarlas a Drive sería lento y llenaría el
+  // almacenamiento local. Se redimensionan al ancho máximo indicado.
+  function _leerImagenRedimensionada(archivo, anchoMaximo, alTerminar, alFallar) {
+    const lector = new FileReader();
+    lector.onerror = function () { if (alFallar) alFallar(); };
+    lector.onload = function () {
+      const img = new Image();
+      img.onerror = function () { if (alFallar) alFallar(); };
+      img.onload = function () {
+        const escala = Math.min(1, anchoMaximo / img.width);
+        const canvas = document.getElementById('canvas-camara');
+        canvas.width = Math.round(img.width * escala);
+        canvas.height = Math.round(img.height * escala);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        alTerminar(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = lector.result;
+    };
+    lector.readAsDataURL(archivo);
+  }
+
+  // ==========================================================================
+  // GUARDAR REGISTRO (local-first)
+  // Se guarda SIEMPRE primero en IndexedDB, haya o no conexión — así el
+  // checador nunca espera a la red para poder capturar el siguiente viaje,
+  // y ningún registro se pierde por una conexión que falla a mitad de envío.
+  // ==========================================================================
+  function manejarEnvioFormulario(evento) {
+    evento.preventDefault();
+    if (estado.guardando) return;
+
+    const errores = validarFormulario();
+    if (errores.length > 0) {
+      mostrarToast(errores[0], 'error');
+      return;
+    }
+
+    const registro = construirRegistro();
+    estado.guardando = true;
+
+    const boton = document.getElementById('btn-guardar');
+    boton.disabled = true;
+    boton.textContent = 'Guardando…';
+
+    // La imagen del vale se genera AQUÍ, antes de encolar, y viaja junto con
+    // el registro hasta Drive. Así queda guardada aunque en ese momento no
+    // haya señal: se sube sola cuando la cola sincronice.
+    generarTicketPNG(registro)
+      .catch(function () { return ''; }) // si fallara, el registro se guarda igual
+      .then(function (valeBase64) {
+        const registroLocal = Object.assign({}, registro, {
+          valeBase64: valeBase64 || '',
+          estadoLocal: 'pendiente',
+          intentos: 0,
+          ultimoError: '',
+          creado: new Date().getTime()
+        });
+
+        return guardarEnAlmacen('registrosPendientes', registroLocal);
+      })
+      .then(function () {
+        estado.guardando = false;
+        boton.disabled = false;
+        boton.textContent = 'Guardar registro';
+
+        mostrarToast('Registro guardado en este dispositivo. Vale ' + registro.numeroVale + '.', 'exito');
+        mostrarTicket(registro);
+        reiniciarFormulario();
+        actualizarContadorPendientes();
+
+        if (navigator.onLine) {
+          sincronizarPendientes(false);
+        }
+      })
+      .catch(function (err) {
+        estado.guardando = false;
+        boton.disabled = false;
+        boton.textContent = 'Guardar registro';
+        mostrarToast('No se pudo guardar el registro en este dispositivo: ' + err.message, 'error');
+      });
+  }
+
+  function validarFormulario() {
+    const errores = [];
+    const esCierre = estado.cicloCompleto && estado.tipoMovimiento === 'ENTRADA';
+
+    // Sin sesión no se debería poder llegar hasta aquí, pero si pasara —un
+    // almacenamiento que se vació, por ejemplo— es mejor decirlo claro que
+    // dejar guardar un registro sin dueño.
+    if (!estado.sesion || !estado.checadorSeleccionado) {
+      errores.push('Tu sesión se perdió. Vuelve a entrar con tu PIN.');
+    } else if (estado.catalogos && estado.obraSeleccionada && !_checadorAplicaEnObra(estado.checadorSeleccionado)) {
+      errores.push('El checador "' + estado.checadorSeleccionado + '" no está asignado a la obra ' + estado.obraSeleccionada + '.');
+    }
+    if (!estado.obraSeleccionada) errores.push('Selecciona la obra.');
+    if (!estado.tipoMovimiento) errores.push('Selecciona Entrada o Salida.');
+
+    if (esCierre) {
+      // El cierre pide lo mínimo para ligarse a su salida y cuantificarla.
+      const vale = document.getElementById('cierre-vale').value.trim();
+      if (!vale) {
+        errores.push('Escribe el número de vale de la salida que estás cerrando.');
+      } else if (!_descomponerVale(vale)) {
+        // Solo se revisa el FORMATO (letras seguidas de números). El
+        // prefijo NO tiene que ser el de esta obra: el vale lo generó la
+        // obra de donde salió el camión, y esta entrada se registra en el
+        // destino. Que ese vale exista y siga abierto lo confirma la
+        // verificación contra el servidor.
+        errores.push('El vale "' + vale + '" no tiene el formato esperado (letras y números, ej. PN0001).');
+      }
+      if (!document.getElementById('cierre-volumen').value) errores.push('Captura el volumen que regresó.');
+
+      // Si hay señal, el vale debió verificarse contra el servidor. Sin
+      // señal se permite guardar: el backend lo validará al sincronizar.
+      if (navigator.onLine && vale && !estado.cierreValidado) {
+        errores.push('Verifica el número de vale antes de guardar (toca fuera del campo).');
+      }
+      return errores;
+    }
+
+    if (!estado.numeroVale) errores.push('No se pudo generar el número de vale.');
+
+    if (estado.tipoMovimiento === 'ENTRADA') {
+      if (!document.getElementById('entrada-origen').value) errores.push('Selecciona el origen.');
+      if (!document.getElementById('entrada-material').value) errores.push('Selecciona el material.');
+      if (!document.getElementById('entrada-empresa').value) errores.push('Selecciona la empresa que acarrea.');
+      if (!estado.camionSeleccionado.entrada) errores.push('Selecciona el camión.');
+      if (!document.getElementById('entrada-volumen').value) errores.push('Captura el volumen real.');
+      if (!document.getElementById('entrada-destino').value) errores.push('Indica la obra destino.');
+    }
+
+    if (estado.tipoMovimiento === 'SALIDA') {
+      if (!document.getElementById('salida-origen').value) errores.push('Indica el origen.');
+      if (!document.getElementById('salida-material').value) errores.push('Selecciona el material.');
+      // En los viajes internos la carga no siempre la hace una máquina del
+      // catálogo, así que el campo es opcional. En los externos se sigue
+      // pidiendo, porque ahí es el dato que respalda el volumen cobrado.
+      if (estado.tipoEmpresa.salida !== 'Interno' && !document.getElementById('salida-maquina').value) {
+        errores.push('Selecciona la máquina que carga.');
+      }
+      if (!document.getElementById('salida-empresa').value) errores.push('Selecciona la empresa que acarrea.');
+      if (!estado.camionSeleccionado.salida) errores.push('Selecciona el camión.');
+      if (!document.getElementById('salida-volumen').value) errores.push('Captura el volumen real.');
+      if (!document.getElementById('salida-destino').value) errores.push('Selecciona el destino.');
+    }
+
+    return errores;
+  }
+
+  function construirRegistro() {
+    const ahora = new Date();
+    const esCierre = estado.cicloCompleto && estado.tipoMovimiento === 'ENTRADA';
+
+    // Un cierre de ciclo es un registro simplificado: los datos del viaje
+    // (material, empresa, camión) ya quedaron en el registro de salida, así
+    // que aquí solo se anota lo que cambió al regresar.
+    if (esCierre) {
+      return {
+        fecha: formatearFecha(ahora),
+        hora: formatearHora(ahora),
+        checador: estado.checadorSeleccionado,
+        obra: estado.obraSeleccionada,
+        tipo: 'ENTRADA',
+        cicloCompleto: true,
+        origen: '', destino: estado.obraSeleccionada,
+        material: '', empresa: '', camion: '', placa: '', conductor: '',
+        capacidadNominal: '', capacidadCalculada: '', maquina: '',
+        valeProveedor: '',
+        volumenReal: document.getElementById('cierre-volumen').value,
+        fotoUrl: '',
+        fotoBase64: estado.fotoBase64 || '',
+        observaciones: document.getElementById('observaciones').value,
+        ubicacionGPS: estado.ubicacionGPS || '',
+        numeroVale: document.getElementById('cierre-vale').value.trim().toUpperCase(),
+        uuid: generarUUID(),
+        // El token viaja CON el registro, no se pega al sincronizar: así, si
+        // el celular cambia de checador antes de que la cola se vacíe, cada
+        // registro sigue atribuido a quien de verdad lo capturó.
+        token: estado.sesion ? estado.sesion.token : ''
+      };
+    }
+
+    const flujo = estado.tipoMovimiento === 'ENTRADA' ? 'entrada' : 'salida';
+    const camion = estado.camionSeleccionado[flujo] || {};
+
+    return {
+      fecha: formatearFecha(ahora),
+      hora: formatearHora(ahora),
+      checador: estado.checadorSeleccionado,
+      obra: estado.obraSeleccionada,
+      tipo: estado.tipoMovimiento,
+      cicloCompleto: estado.cicloCompleto,
+      origen: document.getElementById(flujo + '-origen').value,
+      destino: document.getElementById(flujo + '-destino').value,
+      material: document.getElementById(flujo + '-material').value,
+      empresa: document.getElementById(flujo + '-empresa').value,
+      camion: camion.id || '',
+      placa: camion.placa || '',
+      conductor: document.getElementById(flujo + '-conductor').value || '',
+      capacidadNominal: camion.capacidadNominal || '',
+      capacidadCalculada: camion.capacidadCalculada || '',
+      volumenReal: document.getElementById(flujo + '-volumen').value,
+      maquina: flujo === 'salida' ? document.getElementById('salida-maquina').value : '',
+      valeProveedor: flujo === 'entrada' ? document.getElementById('entrada-vale-proveedor').value.trim() : '',
+      fotoUrl: '',
+      fotoBase64: estado.fotoBase64 || '',
+      observaciones: document.getElementById('observaciones').value,
+      ubicacionGPS: estado.ubicacionGPS || '',
+      numeroVale: estado.numeroVale,
+      uuid: generarUUID(),
+      token: estado.sesion ? estado.sesion.token : ''
+    };
+  }
+
+  function generarUUID() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
+  // ==========================================================================
+  // SINCRONIZACIÓN CON EL BACKEND
+  // Se dispara: (a) al detectar el evento 'online', (b) justo después de
+  // guardar un registro si ya hay conexión, (c) al abrir la app si ya hay
+  // conexión, (d) cada 60s como respaldo, y (e) manualmente con el botón.
+  // ==========================================================================
+  function sincronizarPendientes(esManual) {
+    if (sincronizando) return;
+
+    obtenerTodoDeAlmacen('registrosPendientes')
+      .then(function (pendientes) {
+        if (pendientes.length === 0) {
+          if (esManual) mostrarToast('No hay registros pendientes por sincronizar.', 'info');
+          return;
+        }
+
+        if (!navigator.onLine) {
+          if (esManual) mostrarToast('Sin conexión. Se sincronizará automáticamente al recuperarla.', 'error');
+          return;
+        }
+
+        sincronizando = true;
+        actualizarEstadoConexion('sincronizando');
+
+        const AHORA = new Date().getTime();
+        const registrosParaEnviar = pendientes.map(function (registroLocal) {
+          // Se manda solo lo que el backend espera, sin los metadatos locales.
+          const copia = Object.assign({}, registroLocal);
+
+          // "deCola" le dice al servidor que acepte un token recién vencido.
+          // Solo se marca en registros que de verdad esperaron: uno que se
+          // acaba de capturar debe traer sesión vigente. Sin esta distinción,
+          // el margen de la cola offline aflojaría la caducidad de TODAS las
+          // sesiones, porque aquí pasa cada registro, con señal o sin ella.
+          copia.deCola = (AHORA - (registroLocal.creado || AHORA)) > 10 * 60 * 1000;
+
+          delete copia.estadoLocal;
+          delete copia.intentos;
+          delete copia.ultimoError;
+          delete copia.creado;
+          return copia;
+        });
+
+        google.script.run
+          .withSuccessHandler(function (resultados) { onSincronizacionCompletada(resultados, esManual); })
+          .withFailureHandler(function (err) { onSincronizacionFallida(err, esManual); })
+          .guardarRegistrosEnLote(registrosParaEnviar);
+      })
+      .catch(function (err) {
+        if (esManual) mostrarToast('No se pudo leer la cola local: ' + err.message, 'error');
+      });
+  }
+
+  function onSincronizacionCompletada(resultados, esManual) {
+    const exitosos = resultados.filter(function (r) { return r.resultado && r.resultado.exito; });
+    const fallidos = resultados.filter(function (r) { return !r.resultado || !r.resultado.exito; });
+
+    const promesasBorrado = exitosos.map(function (r) { return eliminarDeAlmacen('registrosPendientes', r.uuid); });
+
+    const promesasFallidos = fallidos.map(function (r) {
+      return obtenerDeAlmacen('registrosPendientes', r.uuid).then(function (registroLocal) {
+        if (!registroLocal) return;
+        registroLocal.estadoLocal = 'error';
+        registroLocal.intentos = (registroLocal.intentos || 0) + 1;
+        registroLocal.ultimoError = (r.resultado && r.resultado.error) || 'Error desconocido';
+        return guardarEnAlmacen('registrosPendientes', registroLocal);
+      });
+    });
+
+    Promise.all(promesasBorrado.concat(promesasFallidos)).then(function () {
+      sincronizando = false;
+      actualizarEstadoConexion();
+      actualizarContadorPendientes();
+
+      if (exitosos.length > 0) {
+        mostrarToast(exitosos.length + ' registro(s) sincronizado(s) correctamente.', 'exito');
+      }
+      // Sesión rechazada por el servidor: no tiene sentido seguir
+      // reintentando ni dejar al checador capturando en falso. Los registros
+      // se quedan en la cola y se mandan cuando vuelva a entrar.
+      const porSesion = fallidos.filter(function (r) {
+        return r.resultado && r.resultado.sesionInvalida;
+      });
+      if (porSesion.length > 0) {
+        manejarSesionInvalida(porSesion[0].resultado.error);
+        return;
+      }
+
+      if (fallidos.length > 0) {
+        mostrarToast(fallidos.length + ' registro(s) no se pudieron sincronizar: ' + fallidos[0].resultado.error, 'error');
+      } else if (esManual && exitosos.length === 0) {
+        mostrarToast('No había registros pendientes por sincronizar.', 'info');
+      }
+
+      // Folios reasignados: un registro capturado sin señal chocó con un
+      // vale que otro checador ya había usado, y el servidor le dio el
+      // siguiente libre. Se avisa aparte y con más tiempo en pantalla,
+      // porque si el vale ya se imprimió hay que corregirlo en el papel.
+      const reasignados = exitosos.filter(function (r) { return r.resultado.valeReasignado; });
+      if (reasignados.length > 0) {
+        const cambios = reasignados.map(function (r) {
+          return r.resultado.valeReasignado.anterior + ' → ' + r.resultado.valeReasignado.nuevo;
+        }).join(', ');
+        mostrarToastLargo('Vale ocupado, se cambió el folio: ' + cambios + '. Corrige el vale en papel si ya se imprimió.', 'error');
+      }
+
+      // El registro pudo guardarse bien pero fallar la subida de la foto o
+      // del vale a Drive. Antes eso pasaba en silencio; ahora se avisa.
+      const avisos = [];
+      exitosos.forEach(function (r) {
+        (r.resultado.avisos || []).forEach(function (aviso) {
+          // La reasignación ya se mostró arriba con su propio mensaje.
+          if (aviso.indexOf('ya estaba ocupado') !== -1) return;
+          if (avisos.indexOf(aviso) === -1) avisos.push(aviso);
+        });
+      });
+      if (avisos.length > 0) mostrarToast(avisos[0], 'error');
+    });
+  }
+
+  function onSincronizacionFallida(err, esManual) {
+    sincronizando = false;
+    actualizarEstadoConexion();
+    if (esManual) mostrarToast('No se pudo sincronizar: ' + err.message, 'error');
+  }
+
+  function actualizarContadorPendientes() {
+    contarEnAlmacen('registrosPendientes')
+      .then(function (cantidad) {
+        const badge = document.getElementById('badge-pendientes');
+        if (cantidad > 0) {
+          badge.textContent = cantidad > 99 ? '99+' : String(cantidad);
+          badge.classList.remove('oculto');
+        } else {
+          badge.classList.add('oculto');
+        }
+      })
+      .catch(function () { /* si falla el conteo, no es crítico */ });
+  }
+
+  function reiniciarFormulario() {
+    // El checador se conserva a propósito: lo normal es que la misma
+    // persona capture varios viajes seguidos, y volver a escribir/elegir
+    // su nombre en cada uno sería fricción innecesaria.
+    // Checador y obra se conservan: lo normal es que la misma persona
+    // capture varios viajes seguidos en la misma obra.
+    const checadorActual = document.getElementById('checador').value;
+    const obraActual = document.getElementById('obra').value;
+
+    document.getElementById('form-registro').reset();
+    document.getElementById('checador').value = checadorActual;
+    document.getElementById('obra').value = obraActual;
+    estado.checadorSeleccionado = checadorActual.trim();
+    estado.obraSeleccionada = obraActual.trim();
+
+    estado.cicloCompleto = false;
+    document.getElementById('ciclo-completo').checked = false;
+    document.getElementById('seccion-cierre-ciclo').classList.add('oculto');
+    document.getElementById('ciclo-ayuda').classList.add('oculto');
+
+    estado.tipoMovimiento = null;
+    estado.camionSeleccionado = { entrada: null, salida: null };
+    estado.tipoEmpresa = { entrada: null, salida: null };
+    estado.ubicacionGPS = '';
+    estado.fotoBase64 = null;
+
+    document.getElementById('btn-entrada').setAttribute('aria-pressed', 'false');
+    document.getElementById('btn-salida').setAttribute('aria-pressed', 'false');
+    document.getElementById('seccion-entrada').classList.add('oculto');
+    document.getElementById('seccion-salida').classList.add('oculto');
+    document.getElementById('seccion-comun').classList.add('oculto');
+    document.getElementById('foto-vista-previa').classList.add('oculto');
+
+    ['entrada', 'salida'].forEach(function (flujo) {
+      document.getElementById(flujo + '-info-camion').classList.add('oculto');
+      document.getElementById(flujo + '-bloque-camion').classList.add('oculto');
+      document.querySelectorAll('#' + flujo + '-botones-camion .btn-camion').forEach(function (boton) {
+        boton.setAttribute('aria-pressed', 'false');
+      });
+      document.getElementById(flujo + '-empresa-interno-info').classList.add('oculto');
+      document.getElementById(flujo + '-empresa-externo-bloque').classList.add('oculto');
+      document.getElementById(flujo + '-empresa').value = '';
+      document.querySelectorAll('[data-flujo="' + flujo + '"][data-tipo-empresa]').forEach(function (btn) {
+        btn.setAttribute('aria-pressed', 'false');
+      });
+    });
+
+    actualizarNumeroVale(true); // silencioso: apenas va a empezar el siguiente viaje
+  }
+
+  // ==========================================================================
+  // VISTA PREVIA DEL TICKET
+  // ==========================================================================
+  function mostrarTicket(registro) {
+    generarTicketPNG(registro).then(function (dataUrl) {
+      document.getElementById('ticket-vista-previa').src = dataUrl;
+      document.getElementById('modal-ticket').classList.remove('oculto');
+
+      // Imagen: sirve para WhatsApp, correo o guardar evidencia.
+      document.getElementById('btn-compartir-ticket').onclick = function () {
+        compartirOdescargarTicket(dataUrl, 'ticket_vale_' + registro.numeroVale + '.png');
+      };
+
+      // Impresión directa por Bluetooth: es el camino normal. Solo
+      // funciona en Android con Chrome y con impresora BLE.
+      document.getElementById('btn-imprimir-directo').onclick = function () {
+        const boton = document.getElementById('btn-imprimir-directo');
+        boton.disabled = true;
+        boton.textContent = 'Imprimiendo…';
+
+        imprimirTicketDirecto(registro)
+          .then(function () {
+            mostrarToast('Ticket impreso.', 'exito');
+            cerrarModalTicket();
+          })
+          .catch(function (err) {
+            const mensaje = explicarErrorImpresion(err);
+            if (mensaje) mostrarToast(mensaje, 'error');
+          })
+          .then(function () {
+            boton.disabled = false;
+            boton.textContent = 'Imprimir';
+          });
+      };
+
+      // Alternativa: archivo para mandar a una app de impresión.
+      document.getElementById('btn-imprimir-zebra').onclick = function () {
+        generarTicketCPCL(registro)
+          .then(function (textoCPCL) {
+            return compartirTicketCPCL(textoCPCL, 'vale_' + registro.numeroVale + '.txt');
+          })
+          .catch(function (err) {
+            mostrarToast('No se pudo preparar el ticket para la impresora: ' + err.message, 'error');
+          });
+      };
+    });
+  }
+
+  function cerrarModalTicket() {
+    document.getElementById('modal-ticket').classList.add('oculto');
+  }
+
+  // ==========================================================================
+  // MENSAJES (toasts)
+  // ==========================================================================
+  /**
+   * Igual que mostrarToast, pero permanece 10 segundos en vez de 4: para
+   * avisos que exigen que el checador haga algo (corregir un vale en
+   * papel) y que no deben desaparecer antes de que alcance a leerlos.
+   */
+  function mostrarToastLargo(mensaje, tipo) {
+    const contenedor = document.getElementById('contenedor-toast');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.dataset.tipo = tipo || 'info';
+    toast.textContent = mensaje;
+    contenedor.appendChild(toast);
+    setTimeout(function () { toast.remove(); }, 10000);
+  }
+
+  function mostrarToast(mensaje, tipo) {
+    const contenedor = document.getElementById('contenedor-toast');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.dataset.tipo = tipo || 'info';
+    toast.textContent = mensaje;
+    contenedor.appendChild(toast);
+    setTimeout(function () { toast.remove(); }, 4000);
+  }
+
+  // ==========================================================================
+  // EVENTOS
+  // ==========================================================================
+  function configurarEventos() {
+    configurarAutocompleteChecador();
+    configurarAutocompleteUbicaciones();
+
+    document.getElementById('btn-cerrar-sesion-checador').addEventListener('click', cerrarSesionChecador);
+
+    document.getElementById('btn-entrada').addEventListener('click', function () { seleccionarTipoMovimiento('ENTRADA'); });
+    document.getElementById('btn-salida').addEventListener('click', function () { seleccionarTipoMovimiento('SALIDA'); });
+
+    document.querySelectorAll('[data-tipo-empresa]').forEach(function (boton) {
+      boton.addEventListener('click', function () {
+        seleccionarTipoEmpresa(boton.dataset.flujo, boton.dataset.tipoEmpresa);
+      });
+    });
+    document.getElementById('entrada-empresa-externo-select').addEventListener('change', function () { manejarCambioEmpresaExterna('entrada'); });
+    document.getElementById('salida-empresa-externo-select').addEventListener('change', function () { manejarCambioEmpresaExterna('salida'); });
+
+    document.getElementById('ciclo-completo').addEventListener('change', manejarCambioCicloCompleto);
+    document.getElementById('cierre-vale').addEventListener('input', function () { actualizarNumeroVale(true); });
+    // La verificación se hace al salir del campo, no en cada tecla, para no
+    // consultar al servidor con el número a medio escribir.
+    document.getElementById('cierre-vale').addEventListener('blur', verificarValeDeCierre);
+    // El material de ENTRADA depende del banco de origen.
+    document.getElementById('entrada-origen').addEventListener('change', function () {
+      filtrarMaterialesPorOrigen('entrada');
+      refrescarEmpresasDisponibles();
+    });
+
+    document.getElementById('obra-reintentar').addEventListener('click', iniciarDeteccionUbicacion);
+
+
+    document.getElementById('btn-foto').addEventListener('click', abrirCamara);
+    document.getElementById('entrada-camara-foto').addEventListener('change', manejarFotoSeleccionada);
+    document.getElementById('btn-cerrar-ticket').addEventListener('click', cerrarModalTicket);
+
+    document.getElementById('btn-sincronizar').addEventListener('click', function () {
+      sincronizarPendientes(true);
+      refrescarCatalogosDesdeServidor(true);
+    });
+
+    document.getElementById('form-registro').addEventListener('submit', manejarEnvioFormulario);
+  }
+</script>
+
+</body>
+</html>
