@@ -1620,7 +1620,7 @@
            página unos 10 minutos, así que después de publicar un cambio
            conviven la versión vieja y la nueva. Con este número se sabe de
            un vistazo cuál tiene cada teléfono, en vez de adivinar. -->
-      <span class="version-app">v2026.10.20</span>
+      <span class="version-app">v2026.10.20b</span>
     </div>
   </div>
 
@@ -3502,7 +3502,7 @@
     const archivo = evento.target.files && evento.target.files[0];
     if (!archivo) return;
 
-    _leerImagenRedimensionada(archivo, 1280, function (dataUrl) {
+    _leerImagenRedimensionada(archivo, ANCHO_FOTO, function (dataUrl) {
       estado.fotoBase64 = dataUrl;
       const vistaPrevia = document.getElementById('foto-vista-previa');
       vistaPrevia.src = dataUrl;
@@ -3513,26 +3513,103 @@
     });
   }
 
-  // Las fotos de un celular moderno pesan varios MB; guardarlas así en
-  // IndexedDB y luego mandarlas a Drive sería lento y llenaría el
-  // almacenamiento local. Se redimensionan al ancho máximo indicado.
+  // Ancho al que se reduce la fotografía antes de guardarla. 1280 px se ve
+  // bien como evidencia y pesa poco. Si algún día hiciera falta más detalle,
+  // este es el único número que hay que tocar.
+  const ANCHO_FOTO = 1280;
+
+  /**
+   * Lee una foto del celular y la devuelve reducida.
+   *
+   * POR QUÉ ESTÁ ESCRITA ASÍ — importa, porque la versión anterior tumbaba
+   * la app con "memoria insuficiente" en pleno registro:
+   *
+   * Antes se usaba FileReader.readAsDataURL sobre la foto ORIGINAL. Eso crea
+   * un texto en base64 de la foto completa: una foto de 12 megapíxeles son
+   * unos 5 MB de archivo, o sea ~7 MB de texto, y al asignarlo a una imagen
+   * el navegador además la descomprime a unos 48 MB de píxeles. Las tres
+   * cosas vivían a la vez, en un teléfono de 4 GB que también está corriendo
+   * Chrome. Con una foto pasaba raspando; con la segunda, se caía.
+   *
+   * Ahora:
+   *   1. Se intenta createImageBitmap con resizeWidth: el navegador decodifica
+   *      YA reducida y nunca arma la imagen completa en memoria.
+   *   2. Si no existe, se usa una URL temporal del archivo (createObjectURL),
+   *      que apunta al archivo en disco en vez de copiarlo a texto.
+   * En ningún caso se materializa la foto original como base64.
+   */
   function _leerImagenRedimensionada(archivo, anchoMaximo, alTerminar, alFallar) {
-    const lector = new FileReader();
-    lector.onerror = function () { if (alFallar) alFallar(); };
-    lector.onload = function () {
-      const img = new Image();
-      img.onerror = function () { if (alFallar) alFallar(); };
-      img.onload = function () {
-        const escala = Math.min(1, anchoMaximo / img.width);
+    const ancho = anchoMaximo || ANCHO_FOTO;
+
+    const dibujar = function (fuente, anchoOriginal, altoOriginal) {
+      try {
+        const escala = Math.min(1, ancho / anchoOriginal);
         const canvas = document.getElementById('canvas-camara');
-        canvas.width = Math.round(img.width * escala);
-        canvas.height = Math.round(img.height * escala);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        alTerminar(canvas.toDataURL('image/jpeg', 0.7));
-      };
-      img.src = lector.result;
+        canvas.width = Math.round(anchoOriginal * escala);
+        canvas.height = Math.round(altoOriginal * escala);
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
+        const resultado = canvas.toDataURL('image/jpeg', 0.7);
+
+        // Liberar explícitamente: el lienzo guarda sus píxeles aunque ya no
+        // se vea, y en un celular con poca memoria eso se acumula registro
+        // tras registro.
+        _liberarLienzo(canvas);
+        if (fuente.close) fuente.close();   // ImageBitmap
+
+        alTerminar(resultado);
+      } catch (err) {
+        if (alFallar) alFallar(err);
+      }
     };
-    lector.readAsDataURL(archivo);
+
+    // --- Camino preferido: decodificar ya reducida ---
+    if (typeof createImageBitmap === 'function') {
+      createImageBitmap(archivo)
+        .then(function (bitmap) {
+          dibujar(bitmap, bitmap.width, bitmap.height);
+        })
+        .catch(function () {
+          _leerConUrlTemporal(archivo, dibujar, alFallar);
+        });
+      return;
+    }
+
+    _leerConUrlTemporal(archivo, dibujar, alFallar);
+  }
+
+  function _leerConUrlTemporal(archivo, dibujar, alFallar) {
+    const url = URL.createObjectURL(archivo);
+    const img = new Image();
+
+    const limpiar = function () {
+      URL.revokeObjectURL(url);
+      img.src = '';
+    };
+
+    img.onload = function () {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      dibujar(img, w, h);
+      limpiar();
+    };
+    img.onerror = function () {
+      limpiar();
+      if (alFallar) alFallar();
+    };
+    img.src = url;
+  }
+
+  /**
+   * Suelta la memoria de un lienzo. Poner ancho y alto en 0 es lo que de
+   * verdad descarta los píxeles; limpiar el dibujo no basta.
+   */
+  function _liberarLienzo(canvas) {
+    if (!canvas) return;
+    try {
+      canvas.width = 0;
+      canvas.height = 0;
+    } catch (err) { /* si no se puede, no es crítico */ }
   }
 
   // ==========================================================================
@@ -3592,8 +3669,33 @@
         estado.guardando = false;
         boton.disabled = false;
         boton.textContent = 'Guardar registro';
-        mostrarToast('No se pudo guardar el registro en este dispositivo: ' + err.message, 'error');
+        mostrarToastLargo(_explicarErrorAlGuardar(err), 'error');
       });
+  }
+
+  /**
+   * Traduce la falla al guardar en algo que el checador pueda resolver ahí
+   * mismo. "QuotaExceededError" no le dice nada a nadie en una obra.
+   */
+  function _explicarErrorAlGuardar(err) {
+    const mensaje = String(err && (err.name || err.message) ? (err.name + ' ' + err.message) : err);
+
+    // El almacenamiento del teléfono se llenó. Casi siempre son fotos de
+    // registros que no se han podido sincronizar.
+    if (/Quota|quota|storage|space/i.test(mensaje)) {
+      return 'Se llenó el almacenamiento de este celular. Conéctate a internet para ' +
+             'sincronizar los registros pendientes: al subirse se liberan. ' +
+             'Si no hay señal, avisa antes de seguir capturando.';
+    }
+
+    // Memoria insuficiente al procesar la imagen.
+    if (/memory|memoria|Allocation|allocat/i.test(mensaje)) {
+      return 'Al celular se le acabó la memoria procesando la fotografía. ' +
+             'Cierra otras aplicaciones y vuelve a intentar. Si se repite, ' +
+             'guarda el registro sin foto: lo importante es el vale.';
+    }
+
+    return 'No se pudo guardar el registro en este celular: ' + (err && err.message ? err.message : mensaje);
   }
 
   function validarFormulario() {
@@ -3964,7 +4066,11 @@
     document.getElementById('seccion-entrada').classList.add('oculto');
     document.getElementById('seccion-salida').classList.add('oculto');
     document.getElementById('seccion-comun').classList.add('oculto');
-    document.getElementById('foto-vista-previa').classList.add('oculto');
+    // Vaciar el src, no solo esconderlo: mientras la imagen tenga la foto
+    // asignada, el navegador conserva sus píxeles descomprimidos en memoria.
+    const vistaFoto = document.getElementById('foto-vista-previa');
+    vistaFoto.src = '';
+    vistaFoto.classList.add('oculto');
 
     ['entrada', 'salida'].forEach(function (flujo) {
       document.getElementById(flujo + '-info-camion').classList.add('oculto');
@@ -4036,6 +4142,9 @@
 
   function cerrarModalTicket() {
     document.getElementById('modal-ticket').classList.add('oculto');
+    // Por lo mismo que la foto: el ticket es una imagen y ocupa memoria
+    // mientras siga asignada, aunque el modal esté cerrado.
+    document.getElementById('ticket-vista-previa').src = '';
   }
 
   // ==========================================================================
