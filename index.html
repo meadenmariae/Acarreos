@@ -584,6 +584,17 @@
     pointer-events: none;
     left: -9999px;
   }
+  /* Discreta a propósito: sirve para comprobar qué versión tiene un
+     teléfono, no para que el checador la lea todos los días. */
+  .version-app {
+    display: block;
+    margin-top: 14px;
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    opacity: 0.6;
+    letter-spacing: 0.03em;
+  }
+
   /* ==========================================================================
      CUÁNTAS COPIAS IMPRIMIR
      ========================================================================== */
@@ -1604,6 +1615,12 @@
 
       <div class="error-pin" id="error-pin"></div>
       <span class="ayuda" id="ayuda-pin">Se queda guardado en este celular; no tendrás que escribirlo cada día.</span>
+
+      <!-- Versión visible: GitHub Pages hace que los celulares guarden la
+           página unos 10 minutos, así que después de publicar un cambio
+           conviven la versión vieja y la nueva. Con este número se sabe de
+           un vistazo cuál tiene cada teléfono, en vez de adivinar. -->
+      <span class="version-app">v2026.10.20</span>
     </div>
   </div>
 
