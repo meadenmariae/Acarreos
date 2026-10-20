@@ -584,6 +584,55 @@
     pointer-events: none;
     left: -9999px;
   }
+  /* ==========================================================================
+     CUÁNTAS COPIAS IMPRIMIR
+     ========================================================================== */
+  .selector-copias {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 14px 0 4px;
+    flex-wrap: wrap;
+  }
+
+  .etiqueta-copias {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+  }
+
+  .botones-copias {
+    display: flex;
+    gap: 6px;
+  }
+
+  /* 44px de lado: es el mínimo para dar al blanco con el dedo, y esto se
+     usa en la obra, muchas veces con guantes. */
+  .btn-copias {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 1rem;
+    font-weight: 800;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: background var(--transicion-rapida), border-color var(--transicion-rapida);
+  }
+
+  .btn-copias[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+  }
+
+  .btn-copias-mas {
+    font-size: 1.2rem;
+    color: var(--color-text-muted);
+  }
+
   .acciones-secundarias-ticket {
     display: flex;
     justify-content: center;
@@ -1414,12 +1463,30 @@
    * Imprime el ticket de un registro. Es la única función que necesita
    * llamar el resto de la app.
    */
-  async function imprimirTicketDirecto(registro) {
+  async function imprimirTicketDirecto(registro, copias) {
     await _asegurarConexion();
 
+    const cuantas = Math.max(1, Math.min(9, Number(copias) || 1));
+
+    // El ticket se dibuja y se convierte UNA sola vez, aunque se impriman
+    // varias copias: es la parte lenta, y repetirla haría esperar al
+    // checador sin ninguna razón.
     const canvas = await _construirCanvasTicket(registro);
     const datos = _canvasAEscPos(canvas);
 
+    for (var copia = 0; copia < cuantas; copia++) {
+      await _enviarALaImpresora(datos);
+
+      // Entre copias se deja respirar a la impresora. Las térmicas
+      // económicas se saturan si se les encima el siguiente trabajo, y el
+      // resultado son tickets cortados o con basura.
+      if (copia < cuantas - 1) {
+        await new Promise(function (r) { setTimeout(r, 400); });
+      }
+    }
+  }
+
+  async function _enviarALaImpresora(datos) {
     // Se manda por partes: el Bluetooth de baja energía tiene un límite
     // pequeño por paquete, y un ticket completo lo excede con mucho.
     for (var i = 0; i < datos.length; i += TAMANO_FRAGMENTO) {
@@ -1850,6 +1917,19 @@
     <div class="contenedor-modal oculto" id="modal-ticket" role="dialog" aria-modal="true" aria-label="Ticket">
       <div class="modal-camara-caja">
         <img id="ticket-vista-previa" class="ticket-imagen" alt="Ticket generado">
+        <!-- Copias: arranca en 1 siempre, nunca recuerda la última elección.
+             Olvidar un "3" puesto en el viaje anterior gasta rollo y confunde
+             al que recibe el vale; volver a tocar el 3 cuesta un toque. -->
+        <div class="selector-copias" role="group" aria-label="Cuántas copias imprimir">
+          <span class="etiqueta-copias">Copias</span>
+          <div class="botones-copias" id="botones-copias">
+            <button type="button" class="btn-copias" data-copias="1" aria-pressed="true">1</button>
+            <button type="button" class="btn-copias" data-copias="2" aria-pressed="false">2</button>
+            <button type="button" class="btn-copias" data-copias="3" aria-pressed="false">3</button>
+            <button type="button" class="btn-copias btn-copias-mas" id="btn-copias-mas" aria-label="Más copias">+</button>
+          </div>
+        </div>
+
         <div class="modal-camara-acciones">
           <button type="button" class="btn-secundario" id="btn-cerrar-ticket">Cerrar</button>
           <button type="button" class="btn-guardar" id="btn-imprimir-directo">Imprimir</button>
@@ -1913,6 +1993,7 @@
     cierreValidado: false,
     ubicacionGPS: '',
     fotoBase64: null,
+    copiasTicket: 1,     // cuántas copias imprimir; se reinicia en cada ticket
     guardando: false
   };
 
@@ -3630,6 +3711,62 @@
     };
   }
 
+  /**
+   * Botones de cuántas copias imprimir.
+   *
+   * Siempre arranca en 1: NO recuerda la elección anterior a propósito. Un "3"
+   * olvidado del viaje pasado gasta rollo y entrega vales de más al conductor;
+   * volver a tocar el 3 cuesta un toque.
+   */
+  function configurarSelectorCopias() {
+    estado.copiasTicket = 1;
+
+    const contenedor = document.getElementById('botones-copias');
+
+    contenedor.querySelectorAll('.btn-copias[data-copias]').forEach(function (boton) {
+      boton.onclick = function () {
+        fijarCopias(Number(boton.dataset.copias));
+      };
+    });
+
+    // El "+" sirve para los casos raros que piden más de tres. Al llegar al
+    // tope vuelve a 1, para no dejar a nadie atrapado en un número alto.
+    document.getElementById('btn-copias-mas').onclick = function () {
+      fijarCopias(estado.copiasTicket >= 9 ? 1 : estado.copiasTicket + 1);
+    };
+
+    fijarCopias(1);
+  }
+
+  function fijarCopias(cuantas) {
+    estado.copiasTicket = Math.max(1, Math.min(9, cuantas));
+
+    const contenedor = document.getElementById('botones-copias');
+    var marcadoEnUnBoton = false;
+
+    contenedor.querySelectorAll('.btn-copias[data-copias]').forEach(function (boton) {
+      const esteEs = Number(boton.dataset.copias) === estado.copiasTicket;
+      boton.setAttribute('aria-pressed', String(esteEs));
+      if (esteEs) marcadoEnUnBoton = true;
+    });
+
+    // Si el número no es 1, 2 ni 3, se muestra en el propio "+" para que
+    // nunca quede duda de cuántas se van a imprimir.
+    const botonMas = document.getElementById('btn-copias-mas');
+    botonMas.textContent = marcadoEnUnBoton ? '+' : String(estado.copiasTicket);
+    botonMas.setAttribute('aria-pressed', String(!marcadoEnUnBoton));
+
+    actualizarTextoBotonImprimir();
+  }
+
+  function actualizarTextoBotonImprimir() {
+    const boton = document.getElementById('btn-imprimir-directo');
+    if (!boton) return;
+    boton.textContent = estado.copiasTicket > 1
+      ? 'Imprimir ' + estado.copiasTicket + ' copias'
+      : 'Imprimir';
+  }
+
   function generarUUID() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -3844,14 +3981,17 @@
 
       // Impresión directa por Bluetooth: es el camino normal. Solo
       // funciona en Android con Chrome y con impresora BLE.
+      configurarSelectorCopias();
+
       document.getElementById('btn-imprimir-directo').onclick = function () {
         const boton = document.getElementById('btn-imprimir-directo');
+        const cuantas = estado.copiasTicket;
         boton.disabled = true;
-        boton.textContent = 'Imprimiendo…';
+        boton.textContent = cuantas > 1 ? 'Imprimiendo ' + cuantas + '…' : 'Imprimiendo…';
 
-        imprimirTicketDirecto(registro)
+        imprimirTicketDirecto(registro, cuantas)
           .then(function () {
-            mostrarToast('Ticket impreso.', 'exito');
+            mostrarToast(cuantas > 1 ? cuantas + ' copias impresas.' : 'Ticket impreso.', 'exito');
             cerrarModalTicket();
           })
           .catch(function (err) {
@@ -3860,7 +4000,7 @@
           })
           .then(function () {
             boton.disabled = false;
-            boton.textContent = 'Imprimir';
+            actualizarTextoBotonImprimir();
           });
       };
 
