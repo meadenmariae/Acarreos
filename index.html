@@ -12,9 +12,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icono-192.png">
   <link rel="apple-touch-icon" href="icono-180.png">
   <meta name="theme-color" content="#6F4E37">
-  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Acarreos">
-  <meta name="mobile-web-app-capable" content="yes">
 
   <!-- Sin Google Fonts a propósito: era la única llamada de red que la app
        hacía sin necesitarla. Se usa la tipografía del sistema, que ya está
@@ -584,6 +582,12 @@
     pointer-events: none;
     left: -9999px;
   }
+  /* El icono de la impresora cambia de color según el estado, para poder
+     saber de un vistazo si está lista sin tener que tocar nada. */
+  #btn-impresora[data-estado="conectada"] { color: var(--color-exito); }
+  #btn-impresora[data-estado="conectando"] { opacity: 0.5; }
+  #btn-impresora[data-estado="sin-conectar"] { color: var(--color-text-muted); }
+
   /* Discreta a propósito: sirve para comprobar qué versión tiene un
      teléfono, no para que el checador la lea todos los días. */
   .version-app {
@@ -1427,7 +1431,10 @@
       estadoImpresora.caracteristica = null;
     });
 
-    const servidor = await dispositivo.gatt.connect();
+    const servidor = await _conTiempoLimite(
+      dispositivo.gatt.connect(),
+      ESPERA_CONEXION_MS,
+      'La impresora no respondió. Revisa que esté encendida y cerca.');
     const caracteristica = await _buscarCaracteristicaEscritura(servidor);
 
     estadoImpresora.dispositivo = dispositivo;
@@ -1457,17 +1464,73 @@
     throw new Error('La impresora se conectó pero no expone un canal para recibir datos.');
   }
 
+  // Cuánto se espera a que la impresora conteste antes de darla por dormida.
+  // Sin este límite, gatt.connect() se queda esperando para siempre y el
+  // checador solo ve el botón atorado en "Imprimiendo…".
+  const ESPERA_CONEXION_MS = 8000;
+
+  function _conTiempoLimite(promesa, ms, mensaje) {
+    return Promise.race([
+      promesa,
+      new Promise(function (_, rechazar) {
+        setTimeout(function () { rechazar(new Error(mensaje)); }, ms);
+      })
+    ]);
+  }
+
+  /**
+   * Deja lista la conexión con la impresora.
+   *
+   * Lo importante aquí es qué pasa cuando NO conecta a la primera, que es lo
+   * normal en campo: la impresora se duerme para ahorrar batería y tarda un
+   * momento en responder. Antes, ese primer fallo dejaba la referencia a una
+   * impresora inalcanzable guardada, y todos los intentos siguientes
+   * fallaban igual sin pedir nada — había que recargar la app para salir.
+   *
+   * Ahora: se intenta dos veces, y si aun así no contesta se suelta la
+   * referencia para que el siguiente intento vuelva a ofrecer la lista.
+   */
   async function _asegurarConexion() {
-    if (estadoImpresora.caracteristica && estadoImpresora.dispositivo.gatt.connected) return;
+    if (estadoImpresora.caracteristica &&
+        estadoImpresora.dispositivo &&
+        estadoImpresora.dispositivo.gatt.connected) return;
 
     if (estadoImpresora.dispositivo) {
-      // Ya se eligió antes: se reconecta sin volver a preguntar.
-      const servidor = await estadoImpresora.dispositivo.gatt.connect();
-      estadoImpresora.caracteristica = await _buscarCaracteristicaEscritura(servidor);
-      return;
+      for (var intento = 1; intento <= 2; intento++) {
+        try {
+          const servidor = await _conTiempoLimite(
+            estadoImpresora.dispositivo.gatt.connect(),
+            ESPERA_CONEXION_MS,
+            'La impresora no respondió a tiempo.');
+          estadoImpresora.caracteristica = await _buscarCaracteristicaEscritura(servidor);
+          return;
+        } catch (err) {
+          // Entre intentos se le da un respiro: muchas térmicas tardan en
+          // despertar y el segundo intento suele entrar sin problema.
+          if (intento === 1) {
+            await new Promise(function (r) { setTimeout(r, 1200); });
+          } else {
+            estadoImpresora.dispositivo = null;
+            estadoImpresora.caracteristica = null;
+            throw new Error('No se pudo reconectar con la impresora. ' +
+              'Revisa que esté encendida y vuelve a tocar Imprimir para elegirla de nuevo.');
+          }
+        }
+      }
     }
 
     await conectarImpresora();
+  }
+
+  /** ¿Hay una impresora lista en este momento? La usa la pantalla. */
+  function impresoraLista() {
+    return !!(estadoImpresora.caracteristica &&
+              estadoImpresora.dispositivo &&
+              estadoImpresora.dispositivo.gatt.connected);
+  }
+
+  function nombreImpresora() {
+    return (estadoImpresora.dispositivo && estadoImpresora.dispositivo.name) || 'la impresora';
   }
 
   /**
@@ -1578,8 +1641,12 @@
     if (/not supported|bluetooth/i.test(mensaje) && !bluetoothDisponible()) {
       return 'Este teléfono no permite imprimir directo. Se necesita Chrome en Android.';
     }
+    if (/no respondió|no se pudo reconectar/i.test(mensaje)) {
+      return mensaje;   // ya viene explicado y con qué hacer
+    }
     if (/GATT|disconnected|connect/i.test(mensaje)) {
-      return 'No se pudo conectar con la impresora. Revisa que esté encendida y cerca.';
+      return 'No se pudo conectar con la impresora. Revisa que esté encendida, ' +
+             'con papel y cerca del teléfono, y vuelve a intentar.';
     }
     if (/No Services|no expone/i.test(mensaje)) {
       // Este caso casi siempre significa Bluetooth Clásico, no BLE. No tiene
@@ -1620,7 +1687,7 @@
            página unos 10 minutos, así que después de publicar un cambio
            conviven la versión vieja y la nueva. Con este número se sabe de
            un vistazo cuál tiene cada teléfono, en vez de adivinar. -->
-      <span class="version-app">v2026.10.20b</span>
+      <span class="version-app">v2026.10.20d</span>
     </div>
   </div>
 
@@ -1637,6 +1704,16 @@
           <span class="punto"></span>
           <span id="estado-conexion-texto">Sin conexión</span>
         </span>
+        <!-- Conectar la impresora ANTES de necesitarla. Descubrir que no
+             conecta cuando ya tienes el camión esperando es el peor momento
+             posible; aquí se hace al llegar a la obra, una vez por turno. -->
+        <button type="button" class="btn-icono" id="btn-impresora" aria-label="Conectar impresora" data-estado="sin-conectar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9V2h12v7"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <path d="M6 14h12v8H6z"/>
+          </svg>
+        </button>
         <button type="button" class="btn-icono" id="btn-sincronizar" aria-label="Sincronizar registros pendientes">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-8.7-6.7M3 12a9 9 0 0 1 9-9 9 9 0 0 1 8.7 6.7"/>
@@ -2090,6 +2167,10 @@
     setInterval(function () {
       if (navigator.onLine) refrescarCatalogosDesdeServidor(false);
     }, INTERVALO_REFRESCO_CATALOGOS_MS);
+
+    // El icono de la impresora refleja si sigue conectada: se duerme sola
+    // tras unos minutos sin uso y conviene verlo antes de necesitarla.
+    setInterval(refrescarIconoImpresora, 5000);
   }
 
   // ==========================================================================
@@ -3513,10 +3594,16 @@
     });
   }
 
-  // Ancho al que se reduce la fotografía antes de guardarla. 1280 px se ve
-  // bien como evidencia y pesa poco. Si algún día hiciera falta más detalle,
-  // este es el único número que hay que tocar.
-  const ANCHO_FOTO = 1280;
+  // Ancho al que se reduce la fotografía. 1024 px se lee perfectamente como
+  // evidencia de una carga o una placa, y comparado con 1280 ocupa un 36 %
+  // menos de memoria al procesarla y de espacio al guardarla. En un teléfono
+  // de 4 GB esa diferencia decide si el registro se guarda o no.
+  const ANCHO_FOTO = 1024;
+
+  // Calidad del JPEG. 0.65 es indistinguible de 0.7 a simple vista y pesa
+  // menos, lo que también acelera la subida a Drive con señal mala.
+  const CALIDAD_FOTO = 0.65;
+
 
   /**
    * Lee una foto del celular y la devuelve reducida.
@@ -3550,7 +3637,7 @@
 
         const ctx = canvas.getContext('2d');
         ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
-        const resultado = canvas.toDataURL('image/jpeg', 0.7);
+        const resultado = canvas.toDataURL('image/jpeg', CALIDAD_FOTO);
 
         // Liberar explícitamente: el lienzo guarda sus píxeles aunque ya no
         // se vea, y en un celular con poca memoria eso se acumula registro
@@ -3564,14 +3651,41 @@
       }
     };
 
-    // --- Camino preferido: decodificar ya reducida ---
+    // --- Camino preferido: que el navegador la decodifique YA REDUCIDA ---
+    //
+    // La diferencia está en las opciones. `createImageBitmap(archivo)` a
+    // secas descomprime la foto COMPLETA: 4000x3000 son unos 48 MB de
+    // píxeles en memoria. Con `resizeWidth` el navegador nunca arma esa
+    // versión completa — entrega directamente la reducida, que ocupa unos
+    // 4 MB. En un teléfono de 4 GB esa es toda la diferencia.
+    //
+    // (Esto es exactamente lo que fallaba: una corrección anterior quitó el
+    // texto base64 intermedio, que eran 7 MB, pero dejó este decodificado
+    // completo de 48 MB intacto. El error seguía apareciendo en los
+    // teléfonos con menos memoria.)
     if (typeof createImageBitmap === 'function') {
-      createImageBitmap(archivo)
+      // SIEMPRE se pide reducida, sin excepciones por tamaño de archivo.
+      // Un primer intento usaba el peso del archivo para decidir, pero el
+      // peso no dice los píxeles: un JPEG muy comprimido de 250 KB puede
+      // ser de 2000 px y decodificarse en 16 MB. El único caso que esto
+      // "desperdicia" es una imagen más angosta que 1024 px, que se
+      // agrandaría un poco — algo que no pasa con fotos de cámara.
+      const opciones = { resizeWidth: ancho, resizeQuality: 'medium' };
+
+      createImageBitmap(archivo, opciones)
         .then(function (bitmap) {
           dibujar(bitmap, bitmap.width, bitmap.height);
         })
         .catch(function () {
-          _leerConUrlTemporal(archivo, dibujar, alFallar);
+          // Algunos navegadores no aceptan las opciones de reducción. Se
+          // reintenta sin ellas antes de rendirse.
+          if (opciones) {
+            createImageBitmap(archivo)
+              .then(function (bitmap) { dibujar(bitmap, bitmap.width, bitmap.height); })
+              .catch(function () { _leerConUrlTemporal(archivo, dibujar, alFallar); });
+          } else {
+            _leerConUrlTemporal(archivo, dibujar, alFallar);
+          }
         });
       return;
     }
@@ -3638,9 +3752,17 @@
     // La imagen del vale se genera AQUÍ, antes de encolar, y viaja junto con
     // el registro hasta Drive. Así queda guardada aunque en ese momento no
     // haya señal: se sube sola cuando la cola sincronice.
+    //
+    // Esta misma imagen se reutiliza después para la pantalla del ticket. Se
+    // generaba dos veces: una aquí y otra al mostrarlo. Además de ser trabajo
+    // repetido, la segunda vez era un punto donde la cosa podía fallar
+    // justo después de guardar, y el checador se quedaba sin su ticket.
+    var pngDelVale = '';
+
     generarTicketPNG(registro)
       .catch(function () { return ''; }) // si fallara, el registro se guarda igual
       .then(function (valeBase64) {
+        pngDelVale = valeBase64 || '';
         const registroLocal = Object.assign({}, registro, {
           valeBase64: valeBase64 || '',
           estadoLocal: 'pendiente',
@@ -3657,7 +3779,12 @@
         boton.textContent = 'Guardar registro';
 
         mostrarToast('Registro guardado en este dispositivo. Vale ' + registro.numeroVale + '.', 'exito');
-        mostrarTicket(registro);
+
+        // La foto ya está a salvo dentro del registro guardado; mantenerla
+        // además en memoria no aporta nada y en este teléfono cuesta caro.
+        estado.fotoBase64 = null;
+
+        mostrarTicket(registro, pngDelVale);
         reiniciarFormulario();
         actualizarContadorPendientes();
 
@@ -3886,6 +4013,50 @@
       : 'Imprimir';
   }
 
+  /**
+   * Conecta la impresora desde el encabezado, antes de necesitarla.
+   *
+   * En campo, la impresora se duerme para ahorrar batería y tarda unos
+   * segundos en despertar. Si eso se descubre al momento de imprimir —con el
+   * camión esperando— ya es tarde. Hacerlo al llegar a la obra convierte un
+   * problema urgente en un trámite de diez segundos.
+   */
+  function conectarImpresoraDesdeElEncabezado() {
+    const boton = document.getElementById('btn-impresora');
+
+    if (typeof impresoraLista === 'function' && impresoraLista()) {
+      mostrarToast('La impresora ' + nombreImpresora() + ' ya está conectada.', 'exito');
+      return;
+    }
+
+    if (!bluetoothDisponible()) {
+      mostrarToastLargo('Este teléfono no permite imprimir directo. Hace falta Chrome en Android.', 'error');
+      return;
+    }
+
+    boton.dataset.estado = 'conectando';
+    mostrarToast('Buscando la impresora… elígela en la lista.', 'info');
+
+    conectarImpresora()
+      .then(function (nombre) {
+        boton.dataset.estado = 'conectada';
+        mostrarToast('Impresora ' + nombre + ' lista.', 'exito');
+      })
+      .catch(function (err) {
+        boton.dataset.estado = 'sin-conectar';
+        const mensaje = explicarErrorImpresion(err);
+        if (mensaje) mostrarToastLargo(mensaje, 'error');
+      });
+  }
+
+  /** Refleja en el icono si la impresora sigue conectada. */
+  function refrescarIconoImpresora() {
+    const boton = document.getElementById('btn-impresora');
+    if (!boton || boton.dataset.estado === 'conectando') return;
+    boton.dataset.estado = (typeof impresoraLista === 'function' && impresoraLista())
+      ? 'conectada' : 'sin-conectar';
+  }
+
   function generarUUID() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -3918,6 +4089,18 @@
 
         sincronizando = true;
         actualizarEstadoConexion('sincronizando');
+
+        // Se manda de POCOS EN POCOS, no todos de golpe.
+        //
+        // Cada registro lleva su foto y la imagen de su vale. Veinte
+        // pendientes juntos son varios MB que había que tener en memoria dos
+        // veces: el arreglo armado y el texto JSON del envío. En un teléfono
+        // de 4 GB eso reventaba justo después de guardar, que es cuando esta
+        // sincronización se dispara. De cinco en cinco el pico es pequeño y
+        // además, si la señal se corta a la mitad, lo ya enviado queda
+        // guardado en vez de perderse el viaje completo.
+        const TAMANO_LOTE = 5;
+        pendientes = pendientes.slice(0, TAMANO_LOTE);
 
         const AHORA = new Date().getTime();
         const registrosParaEnviar = pendientes.map(function (registroLocal) {
@@ -3971,6 +4154,18 @@
 
       if (exitosos.length > 0) {
         mostrarToast(exitosos.length + ' registro(s) sincronizado(s) correctamente.', 'exito');
+      }
+
+      // ¿Quedaron más pendientes? Se sigue con el próximo lote en cuanto
+      // este terminó de guardarse, sin que nadie tenga que tocar nada.
+      if (exitosos.length > 0) {
+        contarEnAlmacen('registrosPendientes')
+          .then(function (quedan) {
+            if (quedan > 0 && navigator.onLine) {
+              setTimeout(function () { sincronizarPendientes(false); }, 600);
+            }
+          })
+          .catch(function () { /* se reintenta en el ciclo normal */ });
       }
       // Sesión rechazada por el servidor: no tiene sentido seguir
       // reintentando ni dejar al checador capturando en falso. Los registros
@@ -4092,9 +4287,39 @@
   // ==========================================================================
   // VISTA PREVIA DEL TICKET
   // ==========================================================================
-  function mostrarTicket(registro) {
-    generarTicketPNG(registro).then(function (dataUrl) {
-      document.getElementById('ticket-vista-previa').src = dataUrl;
+  /**
+   * Abre la pantalla del ticket.
+   *
+   * @param registro  el viaje recién guardado
+   * @param pngYaHecho  la imagen que el guardado YA generó. Si viene, se usa
+   *        tal cual: no tiene sentido dibujar dos veces lo mismo, y cada
+   *        dibujado era una oportunidad más de fallar.
+   *
+   * REGLA: esta pantalla se abre SIEMPRE, pase lo que pase con la imagen.
+   * El ticket es el comprobante del viaje; dejar al checador sin poder
+   * imprimirlo porque falló una vista previa es el peor desenlace posible.
+   * Antes, si el dibujo fallaba, la promesa se rompía sin que nadie la
+   * atrapara: la pantalla no se abría y no aparecía ningún mensaje — el
+   * registro quedaba guardado, pero el checador se quedaba sin su vale y
+   * sin saber por qué.
+   */
+  function mostrarTicket(registro, pngYaHecho) {
+    const conLaImagen = (pngYaHecho && pngYaHecho.length > 100)
+      ? Promise.resolve(pngYaHecho)
+      : generarTicketPNG(registro);
+
+    conLaImagen
+      .catch(function (err) {
+        // La impresión NO depende de esta imagen: imprimirTicketDirecto
+        // vuelve a dibujar el ticket por su cuenta. Así que se avisa y se
+        // sigue adelante con la pantalla abierta.
+        mostrarToastLargo('No se pudo mostrar la vista previa del vale (' +
+          (err && err.message ? err.message : 'error desconocido') +
+          '), pero el registro SÍ se guardó y el botón de imprimir funciona.', 'error');
+        return '';
+      })
+      .then(function (dataUrl) {
+      document.getElementById('ticket-vista-previa').src = dataUrl || '';
       document.getElementById('modal-ticket').classList.remove('oculto');
 
       // Imagen: sirve para WhatsApp, correo o guardar evidencia.
@@ -4137,7 +4362,15 @@
             mostrarToast('No se pudo preparar el ticket para la impresora: ' + err.message, 'error');
           });
       };
-    });
+    })
+      .catch(function (err) {
+        // Red de seguridad final: si algo del armado de la pantalla falla,
+        // se dice en voz alta en vez de dejar al checador mirando el
+        // formulario sin explicación.
+        mostrarToastLargo('El registro se guardó, pero hubo un problema al abrir el ticket: ' +
+          (err && err.message ? err.message : err) + '. Avisa a sistemas.', 'error');
+        document.getElementById('modal-ticket').classList.remove('oculto');
+      });
   }
 
   function cerrarModalTicket() {
@@ -4183,6 +4416,7 @@
     configurarAutocompleteUbicaciones();
 
     document.getElementById('btn-cerrar-sesion-checador').addEventListener('click', cerrarSesionChecador);
+    document.getElementById('btn-impresora').addEventListener('click', conectarImpresoraDesdeElEncabezado);
 
     document.getElementById('btn-entrada').addEventListener('click', function () { seleccionarTipoMovimiento('ENTRADA'); });
     document.getElementById('btn-salida').addEventListener('click', function () { seleccionarTipoMovimiento('SALIDA'); });

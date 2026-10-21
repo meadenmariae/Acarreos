@@ -4,7 +4,7 @@
   "description": "Captura de viajes de acarreo de materiales en obra.",
   "start_url": "index.html",
   "scope": ".",
-  "display": "standalone",
+  "display": "browser",
   "orientation": "portrait",
   "background_color": "#FAF9F6",
   "theme_color": "#6F4E37",
@@ -28,5 +28,6 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "_nota": "display es \"browser\" a proposito: con \"standalone\" Chrome ofrece INSTALAR la app, y esa version corre como proceso aparte con un presupuesto de memoria mas chico. En telefonos de 4 GB eso hacia fallar el guardado. Como acceso directo abre dentro de Chrome, que es donde si funciona, y conserva el icono."
 }

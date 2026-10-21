@@ -570,6 +570,72 @@
     pointer-events: none;
     left: -9999px;
   }
+  /* El icono de la impresora cambia de color según el estado, para poder
+     saber de un vistazo si está lista sin tener que tocar nada. */
+  #btn-impresora[data-estado="conectada"] { color: var(--color-exito); }
+  #btn-impresora[data-estado="conectando"] { opacity: 0.5; }
+  #btn-impresora[data-estado="sin-conectar"] { color: var(--color-text-muted); }
+
+  /* Discreta a propósito: sirve para comprobar qué versión tiene un
+     teléfono, no para que el checador la lea todos los días. */
+  .version-app {
+    display: block;
+    margin-top: 14px;
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+    opacity: 0.6;
+    letter-spacing: 0.03em;
+  }
+
+  /* ==========================================================================
+     CUÁNTAS COPIAS IMPRIMIR
+     ========================================================================== */
+  .selector-copias {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 14px 0 4px;
+    flex-wrap: wrap;
+  }
+
+  .etiqueta-copias {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-text-muted);
+  }
+
+  .botones-copias {
+    display: flex;
+    gap: 6px;
+  }
+
+  /* 44px de lado: es el mínimo para dar al blanco con el dedo, y esto se
+     usa en la obra, muchas veces con guantes. */
+  .btn-copias {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 1rem;
+    font-weight: 800;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    transition: background var(--transicion-rapida), border-color var(--transicion-rapida);
+  }
+
+  .btn-copias[aria-pressed="true"] {
+    background: var(--color-cafe);
+    border-color: var(--color-cafe);
+    color: #fff;
+  }
+
+  .btn-copias-mas {
+    font-size: 1.2rem;
+    color: var(--color-text-muted);
+  }
+
   .acciones-secundarias-ticket {
     display: flex;
     justify-content: center;
