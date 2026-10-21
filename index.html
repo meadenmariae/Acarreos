@@ -794,6 +794,10 @@
     box-shadow: var(--sombra-md);
     font-size: 0.88rem;
     animation: deslizar var(--transicion-base) ease;
+    /* Respeta los saltos de línea del mensaje: algunos avisos son listas de
+       pasos a revisar, y en un solo párrafo no se leen. */
+    white-space: pre-line;
+    line-height: 1.45;
   }
   .toast[data-tipo="exito"] { border-left-color: var(--color-exito); }
   .toast[data-tipo="error"] { border-left-color: var(--color-error); }
@@ -1634,6 +1638,25 @@
    * Traduce los errores de Bluetooth a algo accionable. Los mensajes del
    * navegador son técnicos y en inglés, y no le dicen al checador qué hacer.
    */
+  /**
+   * Qué revisar cuando el buscador de Chrome no muestra ninguna impresora.
+   *
+   * Chrome no distingue entre "el usuario canceló" y "cerró una lista
+   * vacía": las dos llegan como NotFoundError con el mismo texto. Por eso,
+   * cuando alguien pidió conectar a propósito, conviene decirle qué revisar
+   * en vez de callar — callar es lo que hacía antes, y dejaba al checador
+   * mirando un icono gris sin ninguna pista.
+   */
+  function ayudaNoApareceImpresora() {
+    return 'Si no apareció ninguna impresora en la lista, revisa en este orden:\n\n' +
+           '1. Apaga y vuelve a encender la impresora. Si ya está conectada a otro ' +
+           'teléfono deja de anunciarse y no aparece en la lista.\n' +
+           '2. Bluetooth encendido en el celular.\n' +
+           '3. Ubicación encendida: Android la exige para buscar por Bluetooth.\n' +
+           '4. Permiso de Chrome: Ajustes → Aplicaciones → Chrome → Permisos → ' +
+           '"Dispositivos cercanos" debe estar permitido.';
+  }
+
   function explicarErrorImpresion(err) {
     const mensaje = String(err && err.message ? err.message : err);
 
@@ -1687,7 +1710,7 @@
            página unos 10 minutos, así que después de publicar un cambio
            conviven la versión vieja y la nueva. Con este número se sabe de
            un vistazo cuál tiene cada teléfono, en vez de adivinar. -->
-      <span class="version-app">v2026.10.20d</span>
+      <span class="version-app">v2026.10.20f</span>
     </div>
   </div>
 
@@ -4030,13 +4053,20 @@
     }
 
     if (!bluetoothDisponible()) {
-      mostrarToastLargo('Este teléfono no permite imprimir directo. Hace falta Chrome en Android.', 'error');
+      mostrarToastLargo('Este teléfono no permite imprimir directo. Hace falta Chrome en Android.\n\n' +
+        'Detalle técnico: navigator.bluetooth no existe en esta página.', 'error');
       return;
     }
 
     boton.dataset.estado = 'conectando';
     mostrarToast('Buscando la impresora… elígela en la lista.', 'info');
 
+    // IMPORTANTE: requestDevice tiene que llamarse en el mismo instante del
+    // toque del dedo. Si antes de llamarlo se mete cualquier espera —aunque
+    // sea una comprobación que devuelve una promesa— el navegador considera
+    // que ya no hay un gesto del usuario y abre la lista VACÍA, o no la abre.
+    // Por eso aquí no hay ningún await previo, y por eso la comprobación de
+    // getAvailability() se hace DESPUÉS, solo para explicar el fallo.
     conectarImpresora()
       .then(function (nombre) {
         boton.dataset.estado = 'conectada';
@@ -4044,9 +4074,45 @@
       })
       .catch(function (err) {
         boton.dataset.estado = 'sin-conectar';
+
+        // Aquí el checador pidió conectar a propósito, así que SIEMPRE se le
+        // contesta algo. explicarErrorImpresion devuelve null cuando Chrome
+        // reporta "cancelado" — que es también lo que reporta al cerrar una
+        // lista vacía. En ese caso lo útil no es callar, sino decir qué
+        // revisar para que la impresora aparezca.
         const mensaje = explicarErrorImpresion(err);
-        if (mensaje) mostrarToastLargo(mensaje, 'error');
+        const base = mensaje || ayudaNoApareceImpresora();
+
+        // Se adjunta el detalle técnico. Al checador no le dice nada, pero
+        // es lo único que permite diagnosticar a distancia sin tener el
+        // teléfono enfrente: sin esto, "no aparece la lista" puede ser media
+        // docena de causas distintas.
+        _detalleBluetooth(err).then(function (detalle) {
+          mostrarToastLargo(base + '\n\n— — —\n' + detalle, 'error');
+        });
       });
+  }
+
+  /**
+   * Resume el estado real del Bluetooth de esta página, para poder leerlo
+   * en voz alta cuando algo falla.
+   */
+  function _detalleBluetooth(err) {
+    const partes = [];
+    partes.push('Error: ' + ((err && err.name) || '?') + ' — ' + ((err && err.message) || err));
+    partes.push('Origen: ' + location.origin);
+    partes.push('Contexto seguro: ' + (window.isSecureContext ? 'sí' : 'NO'));
+    partes.push('En un marco: ' + (window.top !== window.self ? 'SÍ (esto bloquea Bluetooth)' : 'no'));
+
+    if (!navigator.bluetooth || !navigator.bluetooth.getAvailability) {
+      partes.push('Adaptador: no se puede consultar');
+      return Promise.resolve(partes.join('\n'));
+    }
+
+    return navigator.bluetooth.getAvailability()
+      .then(function (hay) { partes.push('Adaptador disponible: ' + (hay ? 'sí' : 'NO')); })
+      .catch(function () { partes.push('Adaptador: error al consultar'); })
+      .then(function () { return partes.join('\n'); });
   }
 
   /** Refleja en el icono si la impresora sigue conectada. */
